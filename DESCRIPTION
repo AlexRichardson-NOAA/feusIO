@@ -1,11 +1,17 @@
 Package: feusIO
 Type: Package
-Title: What the Package Does (Title Case)
+Title: Runs a Fisheries Input/Output Model Based on Harvests and Implan Multipliers
 Version: 0.1.0
-Author: Who wrote it
-Maintainer: The package maintainer <yourself@somewhere.net>
+Author: Alex Richardson
+Maintainer: Alex Richardson <alex.richardson@noaa.gov>
 Description: More about what it does (maybe more than one line)
     Use four spaces when indenting paragraphs within the Description.
 License: What license is it under?
 Encoding: UTF-8
 LazyData: true
+Imports:
+    dplyr,
+	magrittr
+RoxygenNote: 7.1.1
+Depends: 
+    R (>= 2.10)

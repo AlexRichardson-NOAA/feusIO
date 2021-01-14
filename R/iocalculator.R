@@ -1,53 +1,24 @@
-# Hello, world!
-#
-# This is an example function named 'hello'
-# which prints 'Hello, world!'.
-#
-# You can learn more about package authoring with RStudio at:
-#
-#   http://r-pkgs.had.co.nz/
-#
-# Some useful keyboard shortcuts for package authoring:
-#
-#   Build and Reload Package:  'Ctrl + Shift + B'
-#   Check Package:             'Ctrl + Shift + E'
-#   Test Package:              'Ctrl + Shift + T'
-
+#' Run a Fisheries Input/Output Model
+#'
+#' This function takes in commercial fisheries catch numbers, IMPLAN multipliers, a GDP deflator, and imports numbers and outputs economic impacts.
+#'
+#' @param base_catch A data frame that details catch numbers at the state-species category level for a single year, including variables fips (FIPs number, 0 for US), spec_no (a numeric variable for species category), and base_catch (raw catch numbers in dollars).
+#' @param multiplieArs A data frame that includes 17 multipliers at the state-species category-economic category for a single year.
+#' @param deflator A numeric value that adjusts jobs numbers from the current year to the year the multipliers were made; defaults to 0.8734298, which represents 2017 to 2014.
+#' @param imports A data frame that includes imports numbers in dollars at the state-economic category level for a single year, including fips (FIPs number, 0 for US), Economic Category, and base_catch.
+#' @export
 iocalculator <- function(base_catch, multipliers, deflator = 0.8734298, imports) {
-  multipliers = multipliers %>%
-    left_join(spec_no)
-  base_catch = base_catch %>% mutate(spec_no = case_when(
-    `Species Category` == "Shrimp" ~ 1,
-    `Species Category` == "Crab" ~ 2,
-    `Species Category` == "Lobster" ~ 3,
-    `Species Category` == "East Coast Groundfish" ~ 4,
-    `Species Category` == "HMS" ~ 5,
-    `Species Category` == "Reef Fish" ~ 6,
-    `Species Category` == "West Coast Groundfish " ~ 7,
-    `Species Category` == "West Coast Whiting " ~ 8,
-    `Species Category` == "Halibut" ~ 9,
-    `Species Category` == "Menhaden and Industrial" ~ 10,
-    `Species Category` == "Salmon" ~ 11,
-    `Species Category` == "Sea Scallop" ~ 12,
-    `Species Category` == "Pelagic Herring and Mackerel" ~ 13,
-    `Species Category` == "Surf Clam and Ocean Quahog " ~ 14,
-    `Species Category` == "Other Trawl" ~ 15,
-    `Species Category` == "All Other Finfish" ~ 16,
-    `Species Category` == "All Other Shellfish  " ~ 17,
-    `Species Category` == "Freshwater " ~ 18,
-    `Species Category` == "Inshore and Miscellaneous" ~ 19,
-    `Species Category` == "Bait" ~ 20)) %>%
-    select(-`Species Category`)
-  multipliers_harvesters = multipliers %>% filter(`Economic Category` == "Harvesters")
-  multipliers_processors = multipliers %>% filter(`Economic Category` == "Processors")
-  multipliers_wholesalers = multipliers %>% filter(`Economic Category` == "Wholesalers")
-  multipliers_grocers = multipliers %>% filter(`Economic Category` == "Grocers")
-  multipliers_restaurants = multipliers %>% filter(`Economic Category` == "Restaurants")
+  importFrom(magrittr,"%>%")
+  multipliers_harvesters = multipliers %>% dplyr::filter(`Economic Category` == "Harvesters")
+  multipliers_processors = multipliers %>% dplyr::filter(`Economic Category` == "Processors")
+  multipliers_wholesalers = multipliers %>% dplyr::filter(`Economic Category` == "Wholesalers")
+  multipliers_grocers = multipliers %>% dplyr::filter(`Economic Category` == "Grocers")
+  multipliers_restaurants = multipliers %>% dplyr::filter(`Economic Category` == "Restaurants")
 
   multipliers_harvesters = multipliers_harvesters %>%
-    mutate(Species.Category = `Species Category`) %>%
-    left_join(base_catch, by = c("spec_no", "fips")) %>%
-    mutate(
+    dplyr::mutate(Species.Category = `Species Category`) %>%
+    dplyr::left_join(base_catch, by = c("spec_no", "fips")) %>%
+    dplyr::mutate(
       PI_Direct_Impact = `Personal Income Direct Impacts` * base_catch,
       PI_Indirect_Impact = `Personal Income Indirect Impacts` * `RPC RPC` *
         base_catch,
@@ -71,7 +42,7 @@ iocalculator <- function(base_catch, multipliers, deflator = 0.8734298, imports)
       E_Total = E_Direct_Impact + E_Indirect_Impact + E_Induced_Impact
     )
 
-  harvesters_output = multipliers_harvesters %>% select(
+  harvesters_output = multipliers_harvesters %>% dplyr::select(
     fips,
     `Economic Category`,
     `Species Category`,
@@ -96,9 +67,9 @@ iocalculator <- function(base_catch, multipliers, deflator = 0.8734298, imports)
 
 
   multipliers_processors = multipliers_processors %>%
-    mutate(Species.Category = `Species Category`) %>%
-    left_join(base_catch, by = c("spec_no", "fips")) %>%
-    mutate(processor_inputs = base_catch * Harvesters)
+    dplyr::mutate(Species.Category = `Species Category`) %>%
+    dplyr::left_join(base_catch, by = c("spec_no", "fips")) %>%
+    dplyr::mutate(processor_inputs = base_catch * Harvesters)
 
   if (imports != F) {
     for (n in unique(multipliers_processors$fips)) {
@@ -108,8 +79,8 @@ iocalculator <- function(base_catch, multipliers, deflator = 0.8734298, imports)
     }
   }
   multipliers_processors = multipliers_processors %>%
-    mutate(processor_markup = processor_inputs * markup) %>%
-    mutate(
+    dplyr::mutate(processor_markup = processor_inputs * markup) %>%
+    dplyr::mutate(
       PI_Direct_Impact = `Personal Income Direct Impacts` * processor_markup,
       PI_Indirect_Impact = `Personal Income Indirect Impacts` * `RPC RPC` *
         processor_markup,
@@ -133,7 +104,7 @@ iocalculator <- function(base_catch, multipliers, deflator = 0.8734298, imports)
       E_Total = E_Direct_Impact + E_Indirect_Impact + E_Induced_Impact
     )
 
-  processors_output = multipliers_processors %>% select(
+  processors_output = multipliers_processors %>% dplyr::select(
     fips,
     `Economic Category`,
     `Species Category`,
@@ -156,13 +127,13 @@ iocalculator <- function(base_catch, multipliers, deflator = 0.8734298, imports)
     E_Total
   )
 
-  processor_inputs = multipliers_processors %>% select(fips, spec_no, processor_inputs, processor_markup)
+  processor_inputs = multipliers_processors %>% dplyr::select(fips, spec_no, processor_inputs, processor_markup)
 
   multipliers_wholesalers = multipliers_wholesalers %>%
-    mutate(Species.Category = `Species Category`) %>%
-    left_join(base_catch, by = c("spec_no", "fips")) %>%
-    left_join(processor_inputs, by = c("spec_no", "fips")) %>%
-    mutate(wholesaler_inputs = base_catch * Harvesters + Processors * (processor_inputs +
+    dplyr::mutate(Species.Category = `Species Category`) %>%
+    dplyr::left_join(base_catch, by = c("spec_no", "fips")) %>%
+    dplyr::left_join(processor_inputs, by = c("spec_no", "fips")) %>%
+    dplyr::mutate(wholesaler_inputs = base_catch * Harvesters + Processors * (processor_inputs +
                                                                          processor_markup))
   if(imports != F) {
     for (n in unique(multipliers_wholesalers$fips)) {
@@ -173,8 +144,8 @@ iocalculator <- function(base_catch, multipliers, deflator = 0.8734298, imports)
   }
 
   multipliers_wholesalers = multipliers_wholesalers %>%
-    mutate(wholesaler_markup = wholesaler_inputs * markup) %>%
-    mutate(
+    dplyr::mutate(wholesaler_markup = wholesaler_inputs * markup) %>%
+    dplyr::mutate(
       PI_Direct_Impact = `Personal Income Direct Impacts` * wholesaler_markup,
       PI_Indirect_Impact = `Personal Income Indirect Impacts` * `RPC RPC` *
         wholesaler_markup,
@@ -198,7 +169,7 @@ iocalculator <- function(base_catch, multipliers, deflator = 0.8734298, imports)
       E_Total = E_Direct_Impact + E_Indirect_Impact + E_Induced_Impact
     )
 
-  wholesalers_output = multipliers_wholesalers %>% select(
+  wholesalers_output = multipliers_wholesalers %>% dplyr::select(
     fips,
     `Economic Category`,
     `Species Category`,
@@ -221,17 +192,17 @@ iocalculator <- function(base_catch, multipliers, deflator = 0.8734298, imports)
     E_Total
   )
 
-  wholesaler_inputs = multipliers_wholesalers %>% select(fips,
+  wholesaler_inputs = multipliers_wholesalers %>% dplyr::select(fips,
                                                          spec_no,
                                                          wholesaler_inputs,
                                                          wholesaler_markup)
 
   multipliers_grocers = multipliers_grocers %>%
-    mutate(Species.Category = `Species Category`) %>%
-    left_join(base_catch, by = c("spec_no", "fips")) %>%
-    left_join(processor_inputs, by = c("spec_no", "fips")) %>%
-    left_join(wholesaler_inputs, by = c("spec_no", "fips")) %>%
-    mutate(
+    dplyr::mutate(Species.Category = `Species Category`) %>%
+    dplyr::left_join(base_catch, by = c("spec_no", "fips")) %>%
+    dplyr::left_join(processor_inputs, by = c("spec_no", "fips")) %>%
+    dplyr::left_join(wholesaler_inputs, by = c("spec_no", "fips")) %>%
+    dplyr::mutate(
       grocer_inputs = base_catch * Harvesters + Processors * (processor_inputs +
                                                                 processor_markup) + Wholesalers * (wholesaler_inputs + wholesaler_markup)
     )
@@ -245,8 +216,8 @@ iocalculator <- function(base_catch, multipliers, deflator = 0.8734298, imports)
   }
 
   multipliers_grocers = multipliers_grocers %>%
-    mutate(grocer_markup = grocer_inputs * markup) %>%
-    mutate(
+    dplyr::mutate(grocer_markup = grocer_inputs * markup) %>%
+    dplyr::mutate(
       PI_Direct_Impact = `Personal Income Direct Impacts` * grocer_markup,
       PI_Indirect_Impact = `Personal Income Indirect Impacts` * `RPC RPC` *
         grocer_markup,
@@ -270,7 +241,7 @@ iocalculator <- function(base_catch, multipliers, deflator = 0.8734298, imports)
       E_Total = E_Direct_Impact + E_Indirect_Impact + E_Induced_Impact
     )
 
-  grocers_output = multipliers_grocers %>% select(
+  grocers_output = multipliers_grocers %>% dplyr::select(
     fips,
     `Economic Category`,
     `Species Category`,
@@ -293,15 +264,15 @@ iocalculator <- function(base_catch, multipliers, deflator = 0.8734298, imports)
     E_Total
   )
 
-  grocer_inputs = multipliers_grocers %>% select(fips, spec_no, grocer_inputs, grocer_markup)
+  grocer_inputs = multipliers_grocers %>% dplyr::select(fips, spec_no, grocer_inputs, grocer_markup)
 
   multipliers_restaurants = multipliers_restaurants %>%
-    mutate(Species.Category = `Species Category`) %>%
-    left_join(base_catch, by = c("spec_no", "fips")) %>%
-    left_join(processor_inputs, by = c("spec_no", "fips")) %>%
-    left_join(wholesaler_inputs, by = c("spec_no", "fips")) %>%
-    left_join(grocer_inputs, by = c("spec_no", "fips")) %>%
-    mutate(
+    dplyr::mutate(Species.Category = `Species Category`) %>%
+    dplyr::left_join(base_catch, by = c("spec_no", "fips")) %>%
+    dplyr::left_join(processor_inputs, by = c("spec_no", "fips")) %>%
+    dplyr::left_join(wholesaler_inputs, by = c("spec_no", "fips")) %>%
+    dplyr::left_join(grocer_inputs, by = c("spec_no", "fips")) %>%
+    dplyr::mutate(
       restaurant_inputs = base_catch * Harvesters + Processors * (processor_inputs +
                                                                     processor_markup) + Wholesalers * (wholesaler_inputs + wholesaler_markup) + Grocers *
         (grocer_inputs + grocer_markup)
@@ -316,8 +287,8 @@ iocalculator <- function(base_catch, multipliers, deflator = 0.8734298, imports)
   }
 
   multipliers_restaurants = multipliers_restaurants %>%
-    mutate(restaurant_markup = restaurant_inputs * markup) %>%
-    mutate(
+    dplyr::mutate(restaurant_markup = restaurant_inputs * markup) %>%
+    dplyr::mutate(
       PI_Direct_Impact = `Personal Income Direct Impacts` * restaurant_markup,
       PI_Indirect_Impact = `Personal Income Indirect Impacts` * `RPC RPC` *
         restaurant_markup,
@@ -341,7 +312,7 @@ iocalculator <- function(base_catch, multipliers, deflator = 0.8734298, imports)
       E_Total = E_Direct_Impact + E_Indirect_Impact + E_Induced_Impact
     )
 
-  restaurants_output = multipliers_restaurants %>% select(
+  restaurants_output = multipliers_restaurants %>% dplyr::select(
     fips,
     `Economic Category`,
     `Species Category`,
@@ -364,7 +335,7 @@ iocalculator <- function(base_catch, multipliers, deflator = 0.8734298, imports)
     E_Total
   )
 
-  final_output = bind_rows(
+  final_output = dplyr::bind_rows(
     harvesters_output,
     processors_output,
     wholesalers_output,
@@ -373,8 +344,8 @@ iocalculator <- function(base_catch, multipliers, deflator = 0.8734298, imports)
   )
   final_output[is.na(final_output)] <- 0
   output_sum_spec = final_output %>%
-    group_by(fips, `Economic Category`) %>%
-    summarize(
+    dplyr::group_by(fips, `Economic Category`) %>%
+    dplyr::summarize(
       `Species Category` = "All",
       PI_Direct_Impact = sum(PI_Direct_Impact),
       PI_Indirect_Impact = sum(PI_Indirect_Impact),
@@ -394,9 +365,9 @@ iocalculator <- function(base_catch, multipliers, deflator = 0.8734298, imports)
       E_Total = sum(E_Total)
     )
   output_sum_total = output_sum_spec %>%
-    ungroup() %>%
-    group_by(fips) %>%
-    summarize(
+    dplyr::ungroup() %>%
+    dplyr::group_by(fips) %>%
+    dplyr::summarize(
       `Economic Category` = "All",
       `Species Category` = "All",
       PI_Direct_Impact = sum(PI_Direct_Impact),
@@ -417,8 +388,13 @@ iocalculator <- function(base_catch, multipliers, deflator = 0.8734298, imports)
       E_Total = sum(E_Total)
     )
 
-  final_output = bind_rows(final_output, output_sum_spec, output_sum_total)
+  final_output = dplyr::bind_rows(final_output, output_sum_spec, output_sum_total)
 
   return(final_output)
 
 }
+
+
+#   Build and Reload Package:  'Ctrl + Shift + B'
+#   Check Package:             'Ctrl + Shift + E'
+#   Test Package:              'Ctrl + Shift + T'
