@@ -1,19 +1,86 @@
+#' Sort Catch Numbers Into Species Categories
+#'
+#' This function uses FishEconProdOutput::itis_reclassify(), developed and maintained by Emily Markowitz, to create species category classifications and then sorts catch numbers into those classifications.
+#'
+#' @param commercial_data A data frame that includes catch numbers in dollars and TSN.
+#' @param species_list A list of lists that includes categories at the top level and TSN numbers at the second level. Defaults to Comm.Catch.Spp.List.
+#' @param year A numeric variable that can be used to filter for a specific year. Defaults to NA, which returns all years.
+#' @importFrom magrittr %>%
+#' @export
+io_classifier <- function(commercial_data, species_list = Comm.Catch.Spp.List, year = NA){
+
+  temp <- unique(commercial_data$TSN) %>% FishEconProdOutput::itis_reclassify(tsn = .,
+                                                          categories = species_list,
+                                                          missing_name = "Uncategorized")
+
+  tsn_id = as.data.frame(temp[1][[1]])
+
+  if (sum(tsn_id$category %in% c("Other", "Uncategorized"))>0) {
+    tsn_id<-tsn_id[!(tsn_id$category %in% c("Other", "Uncategorized")),
+                   c("TSN", "category")]
+  }
+
+  tsn_id$TSN<-as.numeric(as.character(tsn_id$TSN))
+
+  commercial.data.merged<-dplyr::left_join(x = commercial.data,
+                                           y = tsn_id,
+                                           by = "TSN")
+
+  commercial.data.out = commercial.data.merged %>%
+    dplyr::filter(DOLLARS>0 & !is.na(DOLLARS) & !is.na(valid)) %>%
+    dplyr::select(State, year, DOLLARS, fips, Region, category) %>%
+    dplyr::group_by(Region, State, fips, year, category) %>%
+    dplyr::summarize(dollars = sum(DOLLARS))
+
+  if(!is.na(year)){
+  commercial.data.out = commercial.data %>%
+    dplyr::rename(`Species Category` = category, base_catch = dollars, Year = year) %>%
+    dplyr::filter(Year == year)
+  }
+
+  return(commercial.data)
+
+}
+
 #' Run a Fisheries Input/Output Model
 #'
 #' This function takes in commercial fisheries catch numbers, IMPLAN multipliers, a GDP deflator, and imports numbers and outputs economic impacts.
 #'
 #' @param base_catch A data frame that details catch numbers at the state-species category level for a single year, including variables fips (FIPs number, 0 for US), spec_no (a numeric variable for species category), and base_catch (raw catch numbers in dollars).
-#' @param multiplieArs A data frame that includes 17 multipliers at the state-species category-economic category for a single year.
+#' @param imports A data frame that includes imports numbers in dollars at the state level for a single year, including fips (FIPs number, 0 for US) and imports.
+#' @param multiplieArs A data frame that includes 17 multipliers at the state-species category-economic category for a single year. Defaults to David Records numbers.
 #' @param deflator A numeric value that adjusts jobs numbers from the current year to the year the multipliers were made; defaults to 0.8734298, which represents 2017 to 2014.
-#' @param imports A data frame that includes imports numbers in dollars at the state-economic category level for a single year, including fips (FIPs number, 0 for US), Economic Category, and base_catch.
+#' @param imports_states A data frame that includes multipliers governing the percentages of imports going to each economic category for a single year. Defaults to 2017 numbers. Set to False for no imports.
+#' @importFrom magrittr %>%
 #' @export
-iocalculator <- function(base_catch, multipliers, deflator = 0.8734298, imports) {
-  importFrom(magrittr,"%>%")
+io_calculator <- function(base_catch, imports, multipliers = multipliers, deflator = 0.8734298, imports_states = imports_states) {
+
+
+  ############
+  # Cleaning #
+  ############
+
+  imports = imports_states %>%
+    dplyr::left_join(imports) %>%
+    dplyr::mutate(imports = imports*value) %>%
+    dplyr::select(fips, `Economic Category` = name, base_catch = imports) %>%
+    dplyr::mutate(`Species Category` = "Imports")
+
   multipliers_harvesters = multipliers %>% dplyr::filter(`Economic Category` == "Harvesters")
+
   multipliers_processors = multipliers %>% dplyr::filter(`Economic Category` == "Processors")
+
   multipliers_wholesalers = multipliers %>% dplyr::filter(`Economic Category` == "Wholesalers")
+
   multipliers_grocers = multipliers %>% dplyr::filter(`Economic Category` == "Grocers")
+
   multipliers_restaurants = multipliers %>% dplyr::filter(`Economic Category` == "Restaurants")
+
+
+
+  ##############
+  # Harvesters #
+  ##############
 
   multipliers_harvesters = multipliers_harvesters %>%
     dplyr::mutate(Species.Category = `Species Category`) %>%
@@ -66,6 +133,11 @@ iocalculator <- function(base_catch, multipliers, deflator = 0.8734298, imports)
   )
 
 
+
+  ##############
+  # Processors #
+  ##############
+
   multipliers_processors = multipliers_processors %>%
     dplyr::mutate(Species.Category = `Species Category`) %>%
     dplyr::left_join(base_catch, by = c("spec_no", "fips")) %>%
@@ -78,6 +150,7 @@ iocalculator <- function(base_catch, multipliers, deflator = 0.8734298, imports)
                              imports$`Economic Category` == "Processors"]
     }
   }
+
   multipliers_processors = multipliers_processors %>%
     dplyr::mutate(processor_markup = processor_inputs * markup) %>%
     dplyr::mutate(
@@ -128,6 +201,12 @@ iocalculator <- function(base_catch, multipliers, deflator = 0.8734298, imports)
   )
 
   processor_inputs = multipliers_processors %>% dplyr::select(fips, spec_no, processor_inputs, processor_markup)
+
+
+
+  ###############
+  # Wholesalers #
+  ###############
 
   multipliers_wholesalers = multipliers_wholesalers %>%
     dplyr::mutate(Species.Category = `Species Category`) %>%
@@ -196,6 +275,11 @@ iocalculator <- function(base_catch, multipliers, deflator = 0.8734298, imports)
                                                          spec_no,
                                                          wholesaler_inputs,
                                                          wholesaler_markup)
+
+
+  ###########
+  # Grocers #
+  ###########
 
   multipliers_grocers = multipliers_grocers %>%
     dplyr::mutate(Species.Category = `Species Category`) %>%
@@ -266,6 +350,12 @@ iocalculator <- function(base_catch, multipliers, deflator = 0.8734298, imports)
 
   grocer_inputs = multipliers_grocers %>% dplyr::select(fips, spec_no, grocer_inputs, grocer_markup)
 
+
+
+  ###############
+  # Restaurants #
+  ###############
+
   multipliers_restaurants = multipliers_restaurants %>%
     dplyr::mutate(Species.Category = `Species Category`) %>%
     dplyr::left_join(base_catch, by = c("spec_no", "fips")) %>%
@@ -335,6 +425,11 @@ iocalculator <- function(base_catch, multipliers, deflator = 0.8734298, imports)
     E_Total
   )
 
+
+  ################
+  # Final Output #
+  ################
+
   final_output = dplyr::bind_rows(
     harvesters_output,
     processors_output,
@@ -343,57 +438,33 @@ iocalculator <- function(base_catch, multipliers, deflator = 0.8734298, imports)
     restaurants_output
   )
   final_output[is.na(final_output)] <- 0
-  output_sum_spec = final_output %>%
-    dplyr::group_by(fips, `Economic Category`) %>%
-    dplyr::summarize(
-      `Species Category` = "All",
-      PI_Direct_Impact = sum(PI_Direct_Impact),
-      PI_Indirect_Impact = sum(PI_Indirect_Impact),
-      PI_Induced_Impact = sum(PI_Induced_Impact),
-      PI_Total = sum(PI_Total),
-      TV_Direct_Impact = sum(TV_Direct_Impact),
-      TV_Indirect_Impact = sum(TV_Indirect_Impact),
-      TV_Induced_Impact = sum(TV_Induced_Impact),
-      TV_Total = sum(TV_Total),
-      O_Direct_Impact = sum(O_Direct_Impact),
-      O_Indirect_Impact = sum(O_Indirect_Impact),
-      O_Induced_Impact = sum(O_Induced_Impact),
-      O_Total = sum(O_Total),
-      E_Direct_Impact = sum(E_Direct_Impact),
-      E_Indirect_Impact = sum(E_Indirect_Impact),
-      E_Induced_Impact = sum(E_Induced_Impact),
-      E_Total = sum(E_Total)
-    )
-  output_sum_total = output_sum_spec %>%
-    dplyr::ungroup() %>%
-    dplyr::group_by(fips) %>%
-    dplyr::summarize(
-      `Economic Category` = "All",
-      `Species Category` = "All",
-      PI_Direct_Impact = sum(PI_Direct_Impact),
-      PI_Indirect_Impact = sum(PI_Indirect_Impact),
-      PI_Induced_Impact = sum(PI_Induced_Impact),
-      PI_Total = sum(PI_Total),
-      TV_Direct_Impact = sum(TV_Direct_Impact),
-      TV_Indirect_Impact = sum(TV_Indirect_Impact),
-      TV_Induced_Impact = sum(TV_Induced_Impact),
-      TV_Total = sum(TV_Total),
-      O_Direct_Impact = sum(O_Direct_Impact),
-      O_Indirect_Impact = sum(O_Indirect_Impact),
-      O_Induced_Impact = sum(O_Induced_Impact),
-      O_Total = sum(O_Total),
-      E_Direct_Impact = sum(E_Direct_Impact),
-      E_Indirect_Impact = sum(E_Indirect_Impact),
-      E_Induced_Impact = sum(E_Induced_Impact),
-      E_Total = sum(E_Total)
-    )
-
-  final_output = dplyr::bind_rows(final_output, output_sum_spec, output_sum_total)
 
   return(final_output)
 
 }
 
+
+
+#' Clean the Output From the IO Model
+#'
+#' This function presents the output from io_calculator() in a variety of specifiable formats.
+#'
+#' @param impacts A data frame that was output by io_calculator().
+#' @param format A string variable with several options for specifying output format.
+#' @param csv A boolean variable that exports the output as comma-separated value file(s) if True.
+#' @export
+io_cleaner <- function(impacts, format, csv){
+  importFrom(magrittr,"%>%")
+
+  if(format == "summary" | format == "all"){
+    impacts_sum = impacts
+
+    impacts_sum_imports = impacts_sum %>%
+      dplyr::filter(`Species Category` == "Impacts")
+
+  }
+
+}
 
 #   Build and Reload Package:  'Ctrl + Shift + B'
 #   Check Package:             'Ctrl + Shift + E'
