@@ -1,6 +1,6 @@
 #' Sort Catch Numbers Into Species Categories
 #'
-#' This function uses FishEconProdOutput::itis_reclassify(), developed and maintained by Emily Markowitz, to create species category classifications and then sorts catch numbers into those classifications.
+#' This function uses itis_reclassify(), developed by Emily Markowitz, to create species category classifications and then sorts catch numbers into those classifications.
 #'
 #' @param commercial_data A data frame that includes catch numbers in dollars and TSN.
 #' @param species_list A list of lists that includes categories at the top level and TSN numbers at the second level. Defaults to Comm.Catch.Spp.List.
@@ -9,9 +9,54 @@
 #' @export
 io_classifier <- function(commercial_data, species_list = Comm.Catch.Spp.List, year = NA){
 
-  temp <- unique(commercial_data$TSN) %>% FishEconProdOutput::itis_reclassify(tsn = .,
+  itis_reclassify<-function(tsn, categories, missing.name){
+
+    # Find which codes are in which categories
+
+    tsn.indata<-taxize::classification(sci_id = tsn[!(is.na(tsn))], db = 'itis')
+    tsn.indata<-tsn.indata[!(names(tsn.indata) %in% 0)]
+    valid0<- sciname<-category0<-bottomrank<-sppname<- TSN<-c()
+
+    for (i in 1:length(categories)) {
+
+      a<-c()
+      for (ii in 1:length(categories[i][[1]])) {
+        a<-c(a, rlist::list.search(lapply(X = tsn.indata, '[[', 3), categories[i][[1]][[ii]] %in% . ))
+      }
+
+      if (length(a)!=0) {
+
+        sppcode<-names(a)
+
+        for (ii in 1:length(sppcode)) {
+          TSN<-c(TSN, sppcode[ii])
+
+          bottomrank<-c(bottomrank, tsn.indata[names(tsn.indata) %in% sppcode[ii]][[1]]$rank[
+            nrow(tsn.indata[names(tsn.indata) %in% sppcode[ii]][[1]])])
+
+          category0<-c(category0, names(categories[i]))
+
+          sciname<-c(sciname, tsn.indata[names(tsn.indata) %in% sppcode[ii]][[1]]$name[
+            nrow(tsn.indata[names(tsn.indata) %in% sppcode[ii]][[1]])])
+
+          valid0<-c(valid0,
+                    ifelse(nrow(tsn.indata[names(tsn.indata) %in% sppcode[ii]][[1]])>1,
+                           "valid", "invalid"))
+        }
+      }
+    }
+    df.out<-data.frame(TSN = TSN,
+                       category = category0,
+                       valid = valid0,
+                       rank = bottomrank,
+                       sciname = sciname )
+
+    return(list(df.out, tsn.indata))
+  }
+
+  temp <- unique(commercial_data$TSN) %>% itis_reclassify(tsn = .,
                                                           categories = species_list,
-                                                          missing_name = "Uncategorized")
+                                                          missing.name = "Uncategorized")
 
   tsn_id = as.data.frame(temp[1][[1]])
 
@@ -33,14 +78,20 @@ io_classifier <- function(commercial_data, species_list = Comm.Catch.Spp.List, y
     dplyr::summarize(dollars = sum(DOLLARS))
 
   if(!is.na(year)){
-  commercial.data.out = commercial.data %>%
+  commercial.data.out = commercial.data.out %>%
     dplyr::rename(`Species Category` = category, base_catch = dollars, Year = year) %>%
     dplyr::filter(Year == year)
   }
+  if(is.na(year)){
+    commercial.data.out = commercial.data.out %>%
+      dplyr::rename(`Species Category` = category, base_catch = dollars, Year = year)
+  }
 
-  return(commercial.data)
+  return(commercial.data.out)
 
 }
+
+
 
 #' Run a Fisheries Input/Output Model
 #'
@@ -449,21 +500,224 @@ io_calculator <- function(base_catch, imports, multipliers = multipliers, deflat
 #'
 #' This function presents the output from io_calculator() in a variety of specifiable formats.
 #'
-#' @param impacts A data frame that was output by io_calculator().
+#' @param imp A data frame that was output by io_calculator().
 #' @param format A string variable with several options for specifying output format.
-#' @param csv A boolean variable that exports the output as comma-separated value file(s) if True.
+#' @param xlsx A boolean variable that exports the output as tabs in an xlsx file if True.
+#' @param fp A data frame containing state names and fips codes. Defaults to standard with EFL = 12 and WFL = 12.5.
+#' @importFrom magrittr %>%
 #' @export
-io_cleaner <- function(impacts, format, csv){
-  importFrom(magrittr,"%>%")
+io_cleaner <- function(imp, format = "summary", xlsx = F, fp = fips) {
+  output = c()
 
-  if(format == "summary" | format == "all"){
+  impacts = imp %>%
+    tidyr::pivot_longer(PI_Direct_Impact:E_Total,
+                        names_to = "names",
+                        values_to = "values") %>%
+    dplyr::mutate(
+      Impact_Type = dplyr::case_when(
+        stringr::str_detect(names, "PI_") ~ "Income Impacts",
+        stringr::str_detect(names, "TV_") ~ "Total Value Added",
+        stringr::str_detect(names, "O_") ~ "Output Impacts",
+        stringr::str_detect(names, "E_") ~ "Employment Impacts"
+      )
+    ) %>%
+    dplyr::mutate(
+      Group = dplyr::case_when(
+        stringr::str_detect(names, "Direct_Impact") ~ "Direct",
+        stringr::str_detect(names, "Indirect_Impact") ~ "Indirect",
+        stringr::str_detect(names, "Induced_Impact") ~ "Induced",
+        stringr::str_detect(names, "Total") ~ "Total"
+      )
+    ) %>%
+    dplyr::select(-names) %>%
+    tidyr::pivot_wider(
+      id_cols = c(
+        fips,
+        `Economic Category`,
+        `Species Category`,
+        spec_no,
+        Impact_Type,
+        Group
+      ),
+      names_from = Group,
+      values_from = values
+    ) %>%
+    dplyr::mutate(`Economic Category` = factor(
+      `Economic Category`,
+      levels = c(
+        "Harvesters",
+        "Processors",
+        "Wholesalers",
+        "Grocers",
+        "Restaurants"
+      )
+    )) %>%
+    dplyr::arrange(fips, `Economic Category`, Impact_Type, spec_no)
+
+  if (format == "summary" | format == "all") {
     impacts_sum = impacts
 
     impacts_sum_imports = impacts_sum %>%
-      dplyr::filter(`Species Category` == "Impacts")
+      dplyr::filter(spec_no == 0) %>%
+      dplyr::group_by(`Economic Category`, Impact_Type) %>%
+      dplyr::summarize(
+        Direct = sum(Direct),
+        Indirect = sum(Indirect),
+        Induced = sum(Induced),
+        Total = sum(Total)
+      ) %>%
+      dplyr::arrange(`Economic Category`, Impact_Type) %>%
+      dplyr::mutate(`Economic Category` = "Imports and Brokers")
+
+    impacts_sum = impacts_sum %>%
+      dplyr::group_by(`Economic Category`, Impact_Type) %>%
+      dplyr::summarize(
+        Direct = sum(Direct),
+        Indirect = sum(Indirect),
+        Induced = sum(Induced),
+        Total = sum(Total)
+      ) %>%
+      dplyr::arrange(`Economic Category`, Impact_Type)
+
+    impacts_sum_seafood = impacts_sum %>%
+      dplyr::ungroup() %>%
+      dplyr::group_by(Impact_Type) %>%
+      dplyr::summarize(
+        Direct = sum(Direct),
+        Indirect = sum(Indirect),
+        Induced = sum(Induced),
+        Total = sum(Total)
+      ) %>%
+      dplyr::arrange(Impact_Type) %>%
+      dplyr::mutate(`Economic Category` = "Harvesters and Seafood Industry")
+
+
+    impacts_sum_out = impacts_sum %>%
+      dplyr::bind_rows(impacts_sum_imports) %>%
+      dplyr::bind_rows(impacts_sum_seafood)
+
+    output = append(output, list("impacts_totals" = impacts_sum_out))
 
   }
 
+
+
+  if (format == "econ" | format == "all") {
+    for (n in unique(impacts$`Economic Category`)) {
+      impacts_sum = impacts %>%
+        dplyr::filter(`Economic Category` == n)
+
+      if (length(impacts_sum$fips) > 0) {
+        impacts_sum = impacts_sum %>%
+          dplyr::group_by(spec_no, Impact_Type) %>%
+          dplyr::summarize(
+            Direct = sum(Direct),
+            Indirect = sum(Indirect),
+            Induced = sum(Induced),
+            Total = sum(Total)
+          ) %>%
+          dplyr::arrange(spec_no, Impact_Type)
+
+
+        assign(paste0("impacts_sum_", n), impacts_sum)
+
+        temp = list(get(paste0("impacts_sum_", n)))
+        names(temp) <- paste0("impacts_sum_", n)
+        output = append(output, temp)
+      }
+    }
+  }
+
+  if (format == "states" | format == "all") {
+    for (n in 1:length(fp$fips)) {
+      impacts_sum = impacts %>%
+        dplyr::filter(fips == fp$fips[n])
+
+      if (length(impacts_sum$fips) > 0) {
+        impacts_sum_imports = impacts_sum %>%
+          dplyr::filter(spec_no == 0) %>%
+          dplyr::group_by(`Economic Category`, Impact_Type) %>%
+          dplyr::summarize(
+            Direct = sum(Direct),
+            Indirect = sum(Indirect),
+            Induced = sum(Induced),
+            Total = sum(Total)
+          ) %>%
+          dplyr::arrange(`Economic Category`, Impact_Type) %>%
+          dplyr::mutate(`Economic Category` = "Imports and Brokers")
+
+        impacts_sum = impacts_sum %>%
+          dplyr::group_by(`Economic Category`, Impact_Type) %>%
+          dplyr::summarize(
+            Direct = sum(Direct),
+            Indirect = sum(Indirect),
+            Induced = sum(Induced),
+            Total = sum(Total)
+          ) %>%
+          dplyr::arrange(`Economic Category`, Impact_Type)
+
+        impacts_sum_seafood = impacts_sum %>%
+          dplyr::ungroup() %>%
+          dplyr::group_by(Impact_Type) %>%
+          dplyr::summarize(
+            Direct = sum(Direct),
+            Indirect = sum(Indirect),
+            Induced = sum(Induced),
+            Total = sum(Total)
+          ) %>%
+          dplyr::arrange(Impact_Type) %>%
+          dplyr::mutate(`Economic Category` = "Harvesters and Seafood Industry")
+
+
+        impacts_sum %>%
+          dplyr::bind_rows(impacts_sum_imports) %>%
+          dplyr::bind_rows(impacts_sum_seafood)
+
+        assign(paste0("impacts_sum_", fips$state_abbr[n]), impacts_sum)
+
+        temp = list(get(paste0("impacts_sum_", fips$state_abbr[n])))
+        names(temp) <- paste0("impacts_sum_", fips$state_abbr[n])
+        output = append(output, temp)
+      }
+    }
+  }
+
+  if(format == "impact" | format == "all"){
+    for (n in unique(impacts$Impact_Type)) {
+      impacts_sum = impacts %>%
+        dplyr::filter(Impact_Type == n)
+
+      if (length(impacts_sum$fips) > 0) {
+        impacts_sum = impacts_sum %>%
+          dplyr::group_by(`Economic Category`, spec_no) %>%
+          dplyr::summarize(
+            Direct = sum(Direct),
+            Indirect = sum(Indirect),
+            Induced = sum(Induced),
+            Total = sum(Total)
+          ) %>%
+          dplyr::arrange(`Economic Category`, spec_no)
+
+        assign(paste0("impacts_sum_", stringr::str_replace_all(n, " ", "_")), impacts_sum)
+
+        temp = list(get(paste0("impacts_sum_", stringr::str_replace_all(n, " ", "_"))))
+        names(temp) <- paste0("impacts_sum_", stringr::str_replace_all(n, " ", "_"))
+        output = append(output, temp)
+      }
+    }
+  }
+
+
+  if(xlsx == F){
+    return(output)
+  }
+
+  if(xlsx == T){
+    dir = getwd()
+    for(n in 1:length(output)){
+      xlsx::write.xlsx(output[n], file = paste0(dir, "/impacts.xlsx"), sheetName = names(output)[n], append = T, row.names = F)
+    }
+  }
 }
 
 #   Build and Reload Package:  'Ctrl + Shift + B'
