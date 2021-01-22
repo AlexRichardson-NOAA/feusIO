@@ -107,7 +107,7 @@ io_classifier <- function(data, species = Comm.Catch.Spp.List, year = NA){
 #' @param imports_s A data frame that includes multipliers governing the percentages of imports going to each economic category for a single year. Defaults to 2017 numbers. Set to False for no imports.
 #' @importFrom magrittr %>%
 #' @export
-io_calculator <- function(catch, import, mult = multipliers, deflator = 0.8734298, imports_s = imports_states) {
+io_calculator <- function(catch, import, implan_multipliers = multipliers, deflator = 0.8734298, import_state_multipliers = imports_states) {
 
   base_catch = catch %>% dplyr::mutate(spec_no = dplyr::case_when(
   `Species Category` == "Shrimp" ~ 1,
@@ -137,8 +137,8 @@ io_calculator <- function(catch, import, mult = multipliers, deflator = 0.873429
 
 
   imports = import
-  multipliers = mult
-  import_states = import_s
+  multipliers = implan_multipliers
+  import_states = import_state_multipliers
 
   ############
   # Cleaning #
