@@ -131,7 +131,7 @@ io_calculator <- function(catch, import, mult = multipliers, deflator = 0.873429
   `Species Category` == "Inshore and Miscellaneous" ~ 19,
   `Species Category` == "Bait" ~ 20)) %>%
   dplyr::select(-`Species Category`)
-  base_catch$fips[base_catch2$State=="West Florida"]<-12.5
+  base_catch$fips[base_catch$State=="West Florida"]<-12.5
 
 
 
