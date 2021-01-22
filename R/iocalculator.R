@@ -70,7 +70,7 @@ io_classifier <- function(data, species = Comm.Catch.Spp.List, year = NA){
 
   tsn_id$TSN<-as.numeric(as.character(tsn_id$TSN))
 
-  commercial.data.merged<-dplyr::left_join(x = commercial.data,
+  commercial.data.merged<-dplyr::left_join(x = commercial_data,
                                            y = tsn_id,
                                            by = "TSN")
 
