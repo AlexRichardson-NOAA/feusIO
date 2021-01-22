@@ -2,12 +2,15 @@
 #'
 #' This function uses itis_reclassify(), developed by Emily Markowitz, to create species category classifications and then sorts catch numbers into those classifications.
 #'
-#' @param commercial_data A data frame that includes catch numbers in dollars and TSN.
-#' @param species_list A list of lists that includes categories at the top level and TSN numbers at the second level. Defaults to Comm.Catch.Spp.List.
+#' @param data A data frame that includes catch numbers in dollars and TSN.
+#' @param list A list of lists that includes categories at the top level and TSN numbers at the second level. Defaults to Comm.Catch.Spp.List.
 #' @param year A numeric variable that can be used to filter for a specific year. Defaults to NA, which returns all years.
 #' @importFrom magrittr %>%
 #' @export
-io_classifier <- function(commercial_data, species_list = Comm.Catch.Spp.List, year = NA){
+io_classifier <- function(data, species = Comm.Catch.Spp.List, year = NA){
+
+  commercial_data = data
+  species_list = species
 
   itis_reclassify<-function(tsn, categories, missing.name){
 
@@ -97,15 +100,45 @@ io_classifier <- function(commercial_data, species_list = Comm.Catch.Spp.List, y
 #'
 #' This function takes in commercial fisheries catch numbers, IMPLAN multipliers, a GDP deflator, and imports numbers and outputs economic impacts.
 #'
-#' @param base_catch A data frame that details catch numbers at the state-species category level for a single year, including variables fips (FIPs number, 0 for US), spec_no (a numeric variable for species category), and base_catch (raw catch numbers in dollars).
-#' @param imports A data frame that includes imports numbers in dollars at the state level for a single year, including fips (FIPs number, 0 for US) and imports.
-#' @param multiplieArs A data frame that includes 17 multipliers at the state-species category-economic category for a single year. Defaults to David Records numbers.
+#' @param catch A data frame that details catch numbers at the state-species category level for a single year, including variables fips (FIPs number, 0 for US), spec_no (a numeric variable for species category), and base_catch (raw catch numbers in dollars).
+#' @param import A data frame that includes imports numbers in dollars at the state level for a single year, including fips (FIPs number, 0 for US) and imports.
+#' @param mult A data frame that includes 17 multipliers at the state-species category-economic category for a single year. Defaults to David Records numbers.
 #' @param deflator A numeric value that adjusts jobs numbers from the current year to the year the multipliers were made; defaults to 0.8734298, which represents 2017 to 2014.
-#' @param imports_states A data frame that includes multipliers governing the percentages of imports going to each economic category for a single year. Defaults to 2017 numbers. Set to False for no imports.
+#' @param imports_s A data frame that includes multipliers governing the percentages of imports going to each economic category for a single year. Defaults to 2017 numbers. Set to False for no imports.
 #' @importFrom magrittr %>%
 #' @export
-io_calculator <- function(base_catch, imports, multipliers = multipliers, deflator = 0.8734298, imports_states = imports_states) {
+io_calculator <- function(catch, import, mult = multipliers, deflator = 0.8734298, imports_s = imports_states) {
 
+  base_catch = catch %>% dplyr::mutate(spec_no = dplyr::case_when(
+  `Species Category` == "Shrimp" ~ 1,
+  `Species Category` == "Crab" ~ 2,
+  `Species Category` == "Lobster" ~ 3,
+  `Species Category` == "East Coast Groundfish" ~ 4,
+  `Species Category` == "HMS" ~ 5,
+  `Species Category` == "Reef Fish" ~ 6,
+  `Species Category` == "West Coast Groundfish " ~ 7,
+  `Species Category` == "West Coast Whiting " ~ 8,
+  `Species Category` == "Halibut" ~ 9,
+  `Species Category` == "Menhaden and Industrial" ~ 10,
+  `Species Category` == "Salmon" ~ 11,
+  `Species Category` == "Sea Scallop" ~ 12,
+  `Species Category` == "Pelagic Herring and Mackerel" ~ 13,
+  `Species Category` == "Surf Clam and Ocean Quahog " ~ 14,
+  `Species Category` == "Other Trawl" ~ 15,
+  `Species Category` == "All Other Finfish" ~ 16,
+  `Species Category` == "All Other Shellfish  " ~ 17,
+  `Species Category` == "Freshwater " ~ 18,
+  `Species Category` == "Inshore and Miscellaneous" ~ 19,
+  `Species Category` == "Bait" ~ 20)) %>%
+  dplyr::select(-`Species Category`)
+  base_catch$fips[base_catch2$State=="West Florida"]<-12.5
+
+
+
+
+  imports = import
+  multipliers = mult
+  import_states = import_s
 
   ############
   # Cleaning #
@@ -500,16 +533,16 @@ io_calculator <- function(base_catch, imports, multipliers = multipliers, deflat
 #'
 #' This function presents the output from io_calculator() in a variety of specifiable formats.
 #'
-#' @param imp A data frame that was output by io_calculator().
+#' @param impact A data frame that was output by io_calculator().
 #' @param format A string variable with several options for specifying output format.
 #' @param xlsx A boolean variable that exports the output as tabs in an xlsx file if True.
 #' @param fp A data frame containing state names and fips codes. Defaults to standard with EFL = 12 and WFL = 12.5.
 #' @importFrom magrittr %>%
 #' @export
-io_cleaner <- function(imp, format = "summary", xlsx = F, fp = fips) {
+io_cleaner <- function(impact, format = "summary", xlsx = F, fp = fips) {
   output = c()
 
-  impacts = imp %>%
+  impacts = impact %>%
     tidyr::pivot_longer(PI_Direct_Impact:E_Total,
                         names_to = "names",
                         values_to = "values") %>%
