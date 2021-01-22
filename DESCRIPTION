@@ -3,6 +3,7 @@ Type: Package
 Title: Runs a Fisheries Input/Output Model Based on Harvests and Implan Multipliers
 Version: 0.0.0.9000
 Author: Alex Richardson
+Author: Emily Markowitz
 Maintainer: Alex Richardson <alex.richardson@noaa.gov>
 Description: More about what it does (maybe more than one line)
     Use four spaces when indenting paragraphs within the Description.
@@ -12,7 +13,8 @@ LazyData: true
 Imports:
     dplyr,
 	magrittr,
-	stringr
+	stringr,
+	taxize
 RoxygenNote: 7.1.1
 Depends: 
     R (>= 2.10)
