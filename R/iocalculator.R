@@ -12,54 +12,11 @@ io_classifier <- function(data, species = Comm.Catch.Spp.List, year = NA){
   commercial_data = data
   species_list = species
 
-  itis_reclassify<-function(tsn, categories, missing.name){
 
-    # Find which codes are in which categories
 
-    tsn.indata<-taxize::classification(sci_id = tsn[!(is.na(tsn))], db = 'itis')
-    tsn.indata<-tsn.indata[!(names(tsn.indata) %in% 0)]
-    valid0<- sciname<-category0<-bottomrank<-sppname<- TSN<-c()
-
-    for (i in 1:length(categories)) {
-
-      a<-c()
-      for (ii in 1:length(categories[i][[1]])) {
-        a<-c(a, rlist::list.search(lapply(X = tsn.indata, '[[', 3), categories[i][[1]][[ii]] %in% . ))
-      }
-
-      if (length(a)!=0) {
-
-        sppcode<-names(a)
-
-        for (ii in 1:length(sppcode)) {
-          TSN<-c(TSN, sppcode[ii])
-
-          bottomrank<-c(bottomrank, tsn.indata[names(tsn.indata) %in% sppcode[ii]][[1]]$rank[
-            nrow(tsn.indata[names(tsn.indata) %in% sppcode[ii]][[1]])])
-
-          category0<-c(category0, names(categories[i]))
-
-          sciname<-c(sciname, tsn.indata[names(tsn.indata) %in% sppcode[ii]][[1]]$name[
-            nrow(tsn.indata[names(tsn.indata) %in% sppcode[ii]][[1]])])
-
-          valid0<-c(valid0,
-                    ifelse(nrow(tsn.indata[names(tsn.indata) %in% sppcode[ii]][[1]])>1,
-                           "valid", "invalid"))
-        }
-      }
-    }
-    df.out<-data.frame(TSN = TSN,
-                       category = category0,
-                       valid = valid0,
-                       rank = bottomrank,
-                       sciname = sciname )
-
-    return(list(df.out, tsn.indata))
-  }
-
-  temp <- unique(commercial_data$TSN) %>% itis_reclassify(tsn = .,
+  temp <- unique(commercial_data$TSN) %>% FishEconProdOutput::itis_reclassify(tsn = .,
                                                           categories = species_list,
-                                                          missing.name = "Uncategorized")
+                                                          missing_name = "Uncategorized")
 
   tsn_id = as.data.frame(temp[1][[1]])
 
@@ -101,13 +58,13 @@ io_classifier <- function(data, species = Comm.Catch.Spp.List, year = NA){
 #' This function takes in commercial fisheries catch numbers, IMPLAN multipliers, a GDP deflator, and imports numbers and outputs economic impacts.
 #'
 #' @param catch A data frame that details catch numbers at the state-species category level for a single year, including variables fips (FIPs number, 0 for US), spec_no (a numeric variable for species category), and base_catch (raw catch numbers in dollars).
-#' @param import A data frame that includes imports numbers in dollars at the state level for a single year, including fips (FIPs number, 0 for US) and imports.
+#' @param import A data frame that includes imports numbers in dollars at the state level for a single year, including fips (FIPs number, 0 for US) and imports. Defaults to False for no imports.
 #' @param mult A data frame that includes 17 multipliers at the state-species category-economic category for a single year. Defaults to David Records numbers.
 #' @param deflator A numeric value that adjusts jobs numbers from the current year to the year the multipliers were made; defaults to 0.8734298, which represents 2017 to 2014.
 #' @param imports_s A data frame that includes multipliers governing the percentages of imports going to each economic category for a single year. Defaults to 2017 numbers. Set to False for no imports.
 #' @importFrom magrittr %>%
 #' @export
-io_calculator <- function(catch, import, implan_multipliers = multipliers, deflator = 0.8734298, import_state_multipliers = imports_states) {
+io_calculator <- function(catch, import = F, implan_multipliers = multipliers, deflator = 0.8734298, import_state_multipliers = imports_states) {
 
   base_catch = catch %>% dplyr::mutate(spec_no = dplyr::case_when(
   `Species Category` == "Shrimp" ~ 1,
@@ -144,11 +101,13 @@ io_calculator <- function(catch, import, implan_multipliers = multipliers, defla
   # Cleaning #
   ############
 
-  imports = imports_states %>%
-    dplyr::left_join(imports) %>%
-    dplyr::mutate(imports = imports*value) %>%
-    dplyr::select(fips, `Economic Category` = name, base_catch = imports) %>%
-    dplyr::mutate(`Species Category` = "Imports")
+  if(!imports==F) {
+    imports = imports_states %>%
+      dplyr::left_join(imports) %>%
+      dplyr::mutate(imports = imports * value) %>%
+      dplyr::select(fips, `Economic Category` = name, base_catch = imports) %>%
+      dplyr::mutate(`Species Category` = "Imports")
+  }
 
   multipliers_harvesters = multipliers %>% dplyr::filter(`Economic Category` == "Harvesters")
 
@@ -523,6 +482,14 @@ io_calculator <- function(catch, import, implan_multipliers = multipliers, defla
   )
   final_output[is.na(final_output)] <- 0
 
+  if(imports==F){
+    final_output = final_output %>%
+      dplyr::mutate(Imports = "No")
+  } else {
+    final_output = final_output %>%
+      dplyr::mutate(Imports = "Yes")
+  }
+
   return(final_output)
 
 }
@@ -740,6 +707,24 @@ io_cleaner <- function(impact, format = "summary", xlsx = F, fp = fips) {
     }
   }
 
+  if(format == "FEUS"){
+    impacts_feus = impacts %>%
+      group_by(fips, `Economic Category`, Impact_Type, Imports) %>%
+      summarize(Direct = sum(Direct),
+                Indirect = sum(Indirect),
+                Induced = sum(Induced),
+                Total = sum(Total)) %>%
+      left_join(fips) %>%
+      ungroup() %>%
+      select(-fips) %>%
+      rename(Metric = `Economic Category`, Sector = Impact_Type, State1 = state_abbr) %>%
+      mutate(Index_Local = row_number(),
+             Year = maxyr,
+             Direct = Direct/1000,
+             Indirect = Indirect/1000,
+             Induced = Induced/1000,
+             Total = Total/1000)
+  }
 
   if(xlsx == F){
     return(output)
@@ -748,7 +733,7 @@ io_cleaner <- function(impact, format = "summary", xlsx = F, fp = fips) {
   if(xlsx == T){
     dir = getwd()
     for(n in 1:length(output)){
-      xlsx::write.xlsx(output[n], file = paste0(dir, "/impacts.xlsx"), sheetName = names(output)[n], append = T, row.names = F)
+      xlsx::write.xlsx(output[n], file = paste0(dir, "/",output,"_impacts.xlsx"), sheetName = names(output)[n], append = T, row.names = F)
     }
   }
 }
