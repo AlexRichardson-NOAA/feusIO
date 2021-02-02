@@ -9,14 +9,16 @@
 #' @export
 io_classifier <- function(data, species = Comm.Catch.Spp.List, year = NA){
 
-  commercial_data = data
+  commercial_data = data %>%
+    mutate(State = as.character(State), abbvst = as.character(abbvst), abbvreg = as.character(abbvreg))
   species_list = species
 
 
 
   temp <- unique(commercial_data$TSN) %>% FishEconProdOutput::itis_reclassify(tsn = .,
-                                                          categories = species_list,
-                                                          missing_name = "Uncategorized")
+                                                                              categories = species_list,
+                                                                              uncategorized_name = "Uncategorized")
+
 
   tsn_id = as.data.frame(temp[1][[1]])
 
@@ -27,20 +29,29 @@ io_classifier <- function(data, species = Comm.Catch.Spp.List, year = NA){
 
   tsn_id$TSN<-as.numeric(as.character(tsn_id$TSN))
 
+
+  if(length(commercial_data$abbvst[commercial_data$abbvst=="WFL"])>0){
+    commercial_data$State[commercial_data$abbvst=="EFL"]<-"Florida"
+    commercial_data$Region[commercial_data$abbvst=="EFL"]<-"Gulf of Mexico"
+    commercial_data$State[commercial_data$abbvst=="WFL"]<-"Florida"
+    commercial_data$abbvst[commercial_data$abbvst=="WFL"]<-"FL"
+    commercial_data$abbvst[commercial_data$abbvst=="EFL"]<-"FL"
+  }
+
   commercial.data.merged<-dplyr::left_join(x = commercial_data,
                                            y = tsn_id,
                                            by = "TSN")
 
   commercial.data.out = commercial.data.merged %>%
-    dplyr::filter(DOLLARS>0 & !is.na(DOLLARS) & !is.na(valid)) %>%
+    dplyr::filter(DOLLARS>0 & !is.na(DOLLARS) & !is.na(category)) %>%
     dplyr::select(State, year, DOLLARS, fips, Region, category) %>%
     dplyr::group_by(Region, State, fips, year, category) %>%
     dplyr::summarize(dollars = sum(DOLLARS))
 
   if(!is.na(year)){
-  commercial.data.out = commercial.data.out %>%
-    dplyr::rename(`Species Category` = category, base_catch = dollars, Year = year) %>%
-    dplyr::filter(Year == year)
+    commercial.data.out = commercial.data.out %>%
+      dplyr::rename(`Species Category` = category, base_catch = dollars, Year = year) %>%
+      dplyr::filter(Year == year)
   }
   if(is.na(year)){
     commercial.data.out = commercial.data.out %>%
@@ -50,7 +61,6 @@ io_classifier <- function(data, species = Comm.Catch.Spp.List, year = NA){
   return(commercial.data.out)
 
 }
-
 
 
 #' Run a Fisheries Input/Output Model
@@ -67,28 +77,27 @@ io_classifier <- function(data, species = Comm.Catch.Spp.List, year = NA){
 io_calculator <- function(catch, import = F, implan_multipliers = multipliers, deflator = 0.8734298, import_state_multipliers = imports_states) {
 
   base_catch = catch %>% dplyr::mutate(spec_no = dplyr::case_when(
-  `Species Category` == "Shrimp" ~ 1,
-  `Species Category` == "Crab" ~ 2,
-  `Species Category` == "Lobster" ~ 3,
-  `Species Category` == "East Coast Groundfish" ~ 4,
-  `Species Category` == "HMS" ~ 5,
-  `Species Category` == "Reef Fish" ~ 6,
-  `Species Category` == "West Coast Groundfish " ~ 7,
-  `Species Category` == "West Coast Whiting " ~ 8,
-  `Species Category` == "Halibut" ~ 9,
-  `Species Category` == "Menhaden and Industrial" ~ 10,
-  `Species Category` == "Salmon" ~ 11,
-  `Species Category` == "Sea Scallop" ~ 12,
-  `Species Category` == "Pelagic Herring and Mackerel" ~ 13,
-  `Species Category` == "Surf Clam and Ocean Quahog " ~ 14,
-  `Species Category` == "Other Trawl" ~ 15,
-  `Species Category` == "All Other Finfish" ~ 16,
-  `Species Category` == "All Other Shellfish  " ~ 17,
-  `Species Category` == "Freshwater " ~ 18,
-  `Species Category` == "Inshore and Miscellaneous" ~ 19,
-  `Species Category` == "Bait" ~ 20)) %>%
-  dplyr::select(-`Species Category`)
-  base_catch$fips[base_catch$State=="West Florida"]<-12.5
+    `Species Category` == "Shrimp" ~ 1,
+    `Species Category` == "Crab" ~ 2,
+    `Species Category` == "Lobster" ~ 3,
+    `Species Category` == "East Coast Groundfish" ~ 4,
+    `Species Category` == "HMS" ~ 5,
+    `Species Category` == "Reef Fish" ~ 6,
+    `Species Category` == "West Coast Groundfish " ~ 7,
+    `Species Category` == "West Coast Whiting " ~ 8,
+    `Species Category` == "Halibut" ~ 9,
+    `Species Category` == "Menhaden and Industrial" ~ 10,
+    `Species Category` == "Salmon" ~ 11,
+    `Species Category` == "Sea Scallop" ~ 12,
+    `Species Category` == "Pelagic Herring and Mackerel" ~ 13,
+    `Species Category` == "Surf Clam and Ocean Quahog " ~ 14,
+    `Species Category` == "Other Trawl" ~ 15,
+    `Species Category` == "All Other Finfish" ~ 16,
+    `Species Category` == "All Other Shellfish  " ~ 17,
+    `Species Category` == "Freshwater " ~ 18,
+    `Species Category` == "Inshore and Miscellaneous" ~ 19,
+    `Species Category` == "Bait" ~ 20)) %>%
+    dplyr::select(-`Species Category`)
 
 
 
@@ -108,6 +117,7 @@ io_calculator <- function(catch, import = F, implan_multipliers = multipliers, d
       dplyr::select(fips, `Economic Category` = name, base_catch = imports) %>%
       dplyr::mutate(`Species Category` = "Imports")
   }
+
 
   multipliers_harvesters = multipliers %>% dplyr::filter(`Economic Category` == "Harvesters")
 
@@ -256,7 +266,7 @@ io_calculator <- function(catch, import = F, implan_multipliers = multipliers, d
     dplyr::left_join(base_catch, by = c("spec_no", "fips")) %>%
     dplyr::left_join(processor_inputs, by = c("spec_no", "fips")) %>%
     dplyr::mutate(wholesaler_inputs = base_catch * Harvesters + Processors * (processor_inputs +
-                                                                         processor_markup))
+                                                                                processor_markup))
   if(imports != F) {
     for (n in unique(multipliers_wholesalers$fips)) {
       multipliers_wholesalers$wholesaler_inputs[multipliers_wholesalers$`Species Category` == "Imports"] <-
@@ -315,9 +325,9 @@ io_calculator <- function(catch, import = F, implan_multipliers = multipliers, d
   )
 
   wholesaler_inputs = multipliers_wholesalers %>% dplyr::select(fips,
-                                                         spec_no,
-                                                         wholesaler_inputs,
-                                                         wholesaler_markup)
+                                                                spec_no,
+                                                                wholesaler_inputs,
+                                                                wholesaler_markup)
 
 
   ###########
@@ -485,7 +495,8 @@ io_calculator <- function(catch, import = F, implan_multipliers = multipliers, d
   if(imports==F){
     final_output = final_output %>%
       dplyr::mutate(Imports = "No")
-  } else {
+  }
+  if(imports!=F){
     final_output = final_output %>%
       dplyr::mutate(Imports = "Yes")
   }
@@ -508,6 +519,7 @@ io_calculator <- function(catch, import = F, implan_multipliers = multipliers, d
 #' @export
 io_cleaner <- function(impact, format = "summary", xlsx = F, fp = fips) {
   output = c()
+  fips = fp
 
   impacts = impact %>%
     tidyr::pivot_longer(PI_Direct_Impact:E_Total,
@@ -537,7 +549,8 @@ io_cleaner <- function(impact, format = "summary", xlsx = F, fp = fips) {
         `Species Category`,
         spec_no,
         Impact_Type,
-        Group
+        Group,
+        Imports
       ),
       names_from = Group,
       values_from = values
@@ -567,7 +580,14 @@ io_cleaner <- function(impact, format = "summary", xlsx = F, fp = fips) {
         Total = sum(Total)
       ) %>%
       dplyr::arrange(`Economic Category`, Impact_Type) %>%
-      dplyr::mutate(`Economic Category` = "Imports and Brokers")
+      dplyr::mutate(`Economic Category` = "Imports and Brokers") %>%
+      dplyr::group_by(`Economic Category`, Impact_Type) %>%
+      dplyr::summarize(
+        Direct = sum(Direct),
+        Indirect = sum(Indirect),
+        Induced = sum(Induced),
+        Total = sum(Total)
+      )
 
     impacts_sum = impacts_sum %>%
       dplyr::group_by(`Economic Category`, Impact_Type) %>%
@@ -708,22 +728,84 @@ io_cleaner <- function(impact, format = "summary", xlsx = F, fp = fips) {
   }
 
   if(format == "FEUS"){
-    impacts_feus = impacts %>%
-      group_by(fips, `Economic Category`, Impact_Type, Imports) %>%
-      summarize(Direct = sum(Direct),
-                Indirect = sum(Indirect),
-                Induced = sum(Induced),
-                Total = sum(Total)) %>%
-      left_join(fips) %>%
-      ungroup() %>%
-      select(-fips) %>%
-      rename(Metric = `Economic Category`, Sector = Impact_Type, State1 = state_abbr) %>%
-      mutate(Index_Local = row_number(),
-             Year = maxyr,
-             Direct = Direct/1000,
-             Indirect = Indirect/1000,
-             Induced = Induced/1000,
-             Total = Total/1000)
+    impacts.imports.states = impacts %>%
+      dplyr::filter(spec_no == 0) %>%
+      dplyr::group_by(fips, `Economic Category`, Impact_Type, Imports) %>%
+      dplyr::summarize(Direct = sum(Direct),
+                       Indirect = sum(Indirect),
+                       Induced = sum(Induced),
+                       Total = sum(Total)) %>%
+      dplyr::left_join(fips) %>%
+      dplyr::ungroup() %>%
+      dplyr::select(-fips) %>%
+      dplyr::rename(Metric = `Economic Category`, Sector = Impact_Type, State1 = state_abbr) %>%
+      dplyr::mutate(Year = maxyr,
+                    Direct = Direct/1000,
+                    Indirect = Indirect/1000,
+                    Induced = Induced/1000,
+                    Total = Total/1000) %>%
+      dplyr::mutate(Metric = "Importers")  %>%
+      dplyr::group_by(Metric, Sector, Imports, State1, Year) %>%
+      dplyr::summarize(Direct = sum(Direct),
+                       Indirect = sum(Indirect),
+                       Induced = sum(Induced),
+                       Total = sum(Total))
+
+    impacts.imports.us <- impacts.imports.states %>%
+      dplyr::ungroup() %>%
+      dplyr::group_by(Metric, Sector, Imports, Year) %>%
+      dplyr::summarize(Direct = sum(Direct),
+                       Indirect = sum(Indirect),
+                       Induced = sum(Induced),
+                       Total = sum(Total)) %>%
+      dplyr::mutate(State1 = "US")
+
+
+    impacts.states = impacts %>%
+      dplyr::group_by(fips, `Economic Category`, Impact_Type, Imports) %>%
+      dplyr::summarize(Direct = sum(Direct),
+                       Indirect = sum(Indirect),
+                       Induced = sum(Induced),
+                       Total = sum(Total)) %>%
+      dplyr::left_join(fips) %>%
+      dplyr::ungroup() %>%
+      dplyr::select(-fips) %>%
+      dplyr::rename(Metric = `Economic Category`, Sector = Impact_Type, State1 = state_abbr) %>%
+      dplyr::mutate(Year = maxyr,
+                    Direct = Direct/1000,
+                    Indirect = Indirect/1000,
+                    Induced = Induced/1000,
+                    Total = Total/1000)
+
+    impacts.allsectors.states = impacts.states %>%
+      dplyr::ungroup() %>%
+      dplyr::group_by(Sector, Imports, Year, State1) %>%
+      dplyr::summarize(Direct = sum(Direct),
+                       Indirect = sum(Indirect),
+                       Induced = sum(Induced),
+                       Total = sum(Total)) %>%
+      dplyr::mutate(Metric = "Total Impacts")
+
+    impacts.allsectors.us = impacts.allsectors.states %>%
+      dplyr::ungroup() %>%
+      dplyr::group_by(Metric, Sector, Imports, Year) %>%
+      dplyr::summarize(Direct = sum(Direct),
+                       Indirect = sum(Indirect),
+                       Induced = sum(Induced),
+                       Total = sum(Total)) %>%
+      dplyr::mutate(State1 = "US")
+
+
+    impacts.us = impacts.states %>%
+      dplyr::group_by(Metric, Sector, Imports, Year) %>%
+      dplyr::summarize(Direct = sum(Direct),
+                       Indirect = sum(Indirect),
+                       Induced = sum(Induced),
+                       Total = sum(Total)) %>%
+      dplyr::mutate(State1 = "US")
+
+    output = dplyr::bind_rows(impacts.states, impacts.us, impacts.imports.states, impacts.imports.us, impacts.allsectors.states, impacts.allsectors.us) %>%
+      dplyr::mutate(Index_Local = row_number())
   }
 
   if(xlsx == F){
