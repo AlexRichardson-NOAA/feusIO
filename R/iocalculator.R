@@ -5,22 +5,24 @@
 #' @param data A data frame that includes catch numbers in dollars and TSN.
 #' @param list A list of lists that includes categories at the top level and TSN numbers at the second level. Defaults to Comm.Catch.Spp.List.
 #' @param year A numeric variable that can be used to filter for a specific year. Defaults to NA, which returns all years.
+#' @param recal A binary variable that determines whether the API should be queried or a default value used. Defaults to TRUE
+#' @param tsn A dataset that can be used in place of the API call. Defaults to NULL
 #' @importFrom magrittr %>%
 #' @export
-io_classifier <- function(data, species = Comm.Catch.Spp.List, year = NA){
+io_classifier <- function(data, species = Comm.Catch.Spp.List, year = NA, recall = T, tsn = NULL){
 
   commercial_data = data %>%
     mutate(State = as.character(State), abbvst = as.character(abbvst), abbvreg = as.character(abbvreg))
   species_list = species
 
-
-
-  temp <- unique(commercial_data$TSN) %>% FishEconProdOutput::itis_reclassify(tsn = .,
-                                                                              categories = species_list,
-                                                                              uncategorized_name = "Uncategorized")
-
-
-  tsn_id = as.data.frame(temp[1][[1]])
+  if(recall == T){
+    temp <- unique(commercial_data$TSN) %>% FishEconProdOutput::itis_reclassify(tsn = .,
+                                                                                categories = species_list,
+                                                                                uncategorized_name = "Uncategorized")
+    tsn_id = as.data.frame(temp[1][[1]])
+  } else {
+    tsn_id = tsn
+  }
 
   if (sum(tsn_id$category %in% c("Other", "Uncategorized"))>0) {
     tsn_id<-tsn_id[!(tsn_id$category %in% c("Other", "Uncategorized")),
@@ -74,7 +76,7 @@ io_classifier <- function(data, species = Comm.Catch.Spp.List, year = NA){
 #' @param imports_s A data frame that includes multipliers governing the percentages of imports going to each economic category for a single year. Defaults to 2017 numbers. Set to False for no imports.
 #' @importFrom magrittr %>%
 #' @export
-io_calculator <- function(catch, import = F, implan_multipliers = multipliers, deflator = 0.8734298, import_state_multipliers = imports_states) {
+io_calculator <- function(catch, import_numbers = F, implan_multipliers = multipliers, deflator = 0.8734298, import_state_multipliers = imports_states) {
 
   base_catch = catch %>% dplyr::mutate(spec_no = dplyr::case_when(
     `Species Category` == "Shrimp" ~ 1,
@@ -102,7 +104,7 @@ io_calculator <- function(catch, import = F, implan_multipliers = multipliers, d
 
 
 
-  imports = import
+  imports = import_numbers
   multipliers = implan_multipliers
   import_states = import_state_multipliers
 
@@ -155,10 +157,10 @@ io_calculator <- function(catch, import = F, implan_multipliers = multipliers, d
       O_Indirect_Impact = `Output Indirect Impacts` * `RPC RPC` * base_catch,
       O_Induced_Impact = `Output Induced Impacts` * `RPC RPC` * base_catch,
       O_Total = O_Direct_Impact + O_Indirect_Impact + O_Induced_Impact,
-      E_Direct_Impact = `Employment Direct Impacts` * base_catch * deflator,
+      E_Direct_Impact = `Employment Direct Impacts` * base_catch * deflator / 1000,
       E_Indirect_Impact = `Employment Indirect Impacts` * `RPC RPC` *
-        base_catch * deflator,
-      E_Induced_Impact = `Employment Induced Impacts` * `RPC RPC` * base_catch * deflator,
+        base_catch * deflator / 1000,
+      E_Induced_Impact = `Employment Induced Impacts` * `RPC RPC` * base_catch * deflator / 1000,
       E_Total = E_Direct_Impact + E_Indirect_Impact + E_Induced_Impact
     )
 
@@ -223,10 +225,10 @@ io_calculator <- function(catch, import = F, implan_multipliers = multipliers, d
       O_Indirect_Impact = `Output Indirect Impacts` * `RPC RPC` * processor_markup,
       O_Induced_Impact = `Output Induced Impacts` * `RPC RPC` * processor_markup,
       O_Total = O_Direct_Impact + O_Indirect_Impact + O_Induced_Impact,
-      E_Direct_Impact = `Employment Direct Impacts` * processor_markup * deflator,
+      E_Direct_Impact = `Employment Direct Impacts` * processor_markup * deflator / 1000,
       E_Indirect_Impact = `Employment Indirect Impacts` * `RPC RPC` *
-        processor_markup * deflator,
-      E_Induced_Impact = `Employment Induced Impacts` * `RPC RPC` * processor_markup * deflator,
+        processor_markup * deflator / 1000,
+      E_Induced_Impact = `Employment Induced Impacts` * `RPC RPC` * processor_markup * deflator / 1000,
       E_Total = E_Direct_Impact + E_Indirect_Impact + E_Induced_Impact
     )
 
@@ -294,10 +296,10 @@ io_calculator <- function(catch, import = F, implan_multipliers = multipliers, d
       O_Indirect_Impact = `Output Indirect Impacts` * `RPC RPC` * wholesaler_markup,
       O_Induced_Impact = `Output Induced Impacts` * `RPC RPC` * wholesaler_markup,
       O_Total = O_Direct_Impact + O_Indirect_Impact + O_Induced_Impact,
-      E_Direct_Impact = `Employment Direct Impacts` * wholesaler_markup * deflator,
+      E_Direct_Impact = `Employment Direct Impacts` * wholesaler_markup * deflator / 1000,
       E_Indirect_Impact = `Employment Indirect Impacts` * `RPC RPC` *
-        wholesaler_markup * deflator,
-      E_Induced_Impact = `Employment Induced Impacts` * `RPC RPC` * wholesaler_markup * deflator,
+        wholesaler_markup * deflator / 1000,
+      E_Induced_Impact = `Employment Induced Impacts` * `RPC RPC` * wholesaler_markup * deflator / 1000,
       E_Total = E_Direct_Impact + E_Indirect_Impact + E_Induced_Impact
     )
 
@@ -371,10 +373,10 @@ io_calculator <- function(catch, import = F, implan_multipliers = multipliers, d
       O_Indirect_Impact = `Output Indirect Impacts` * `RPC RPC` * grocer_markup,
       O_Induced_Impact = `Output Induced Impacts` * `RPC RPC` * grocer_markup,
       O_Total = O_Direct_Impact + O_Indirect_Impact + O_Induced_Impact,
-      E_Direct_Impact = `Employment Direct Impacts` * grocer_markup * deflator,
+      E_Direct_Impact = `Employment Direct Impacts` * grocer_markup * deflator / 1000,
       E_Indirect_Impact = `Employment Indirect Impacts` * `RPC RPC` *
-        grocer_markup * deflator,
-      E_Induced_Impact = `Employment Induced Impacts` * `RPC RPC` * grocer_markup * deflator,
+        grocer_markup * deflator / 1000,
+      E_Induced_Impact = `Employment Induced Impacts` * `RPC RPC` * grocer_markup * deflator / 1000,
       E_Total = E_Direct_Impact + E_Indirect_Impact + E_Induced_Impact
     )
 
@@ -448,10 +450,10 @@ io_calculator <- function(catch, import = F, implan_multipliers = multipliers, d
       O_Indirect_Impact = `Output Indirect Impacts` * `RPC RPC` * restaurant_markup,
       O_Induced_Impact = `Output Induced Impacts` * `RPC RPC` * restaurant_markup,
       O_Total = O_Direct_Impact + O_Indirect_Impact + O_Induced_Impact,
-      E_Direct_Impact = `Employment Direct Impacts` * restaurant_markup * deflator,
+      E_Direct_Impact = `Employment Direct Impacts` * restaurant_markup * deflator / 1000,
       E_Indirect_Impact = `Employment Indirect Impacts` * `RPC RPC` *
-        restaurant_markup * deflator,
-      E_Induced_Impact = `Employment Induced Impacts` * `RPC RPC` * restaurant_markup * deflator,
+        restaurant_markup * deflator / 1000,
+      E_Induced_Impact = `Employment Induced Impacts` * `RPC RPC` * restaurant_markup * deflator / 1000,
       E_Total = E_Direct_Impact + E_Indirect_Impact + E_Induced_Impact
     )
 
@@ -515,9 +517,10 @@ io_calculator <- function(catch, import = F, implan_multipliers = multipliers, d
 #' @param format A string variable with several options for specifying output format.
 #' @param xlsx A boolean variable that exports the output as tabs in an xlsx file if True.
 #' @param fp A data frame containing state names and fips codes. Defaults to standard with EFL = 12 and WFL = 12.5.
+#' @param maxyr The catch year - only used for FEUS.
 #' @importFrom magrittr %>%
 #' @export
-io_cleaner <- function(impact, format = "summary", xlsx = F, fp = fips) {
+io_cleaner <- function(impact, format = "summary", xlsx = F, fp = fips, maxyr = 2018) {
   output = c()
   fips = fp
 
@@ -817,6 +820,7 @@ io_cleaner <- function(impact, format = "summary", xlsx = F, fp = fips) {
     for(n in 1:length(output)){
       xlsx::write.xlsx(output[n], file = paste0(dir, "/",output,"_impacts.xlsx"), sheetName = names(output)[n], append = T, row.names = F)
     }
+    return(output)
   }
 }
 
