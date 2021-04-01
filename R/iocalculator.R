@@ -29,7 +29,7 @@ io_classifier <- function(data, species = Comm.Catch.Spp.List, year = NA, recall
 
   } else {
     tsn_id = tsn
-    tsnid2 = tsn2
+    tsn_id2 = tsn2
   }
 
   if (sum(tsn_id$category %in% c("Other", "Uncategorized"))>0) {
