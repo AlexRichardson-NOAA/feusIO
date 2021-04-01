@@ -7,21 +7,29 @@
 #' @param year A numeric variable that can be used to filter for a specific year. Defaults to NA, which returns all years.
 #' @param recal A binary variable that determines whether the API should be queried or a default value used. Defaults to TRUE
 #' @param tsn A dataset that can be used in place of the API call. Defaults to NULL
+#' @param tsn2 A dataset that can be used in place of the API call. Defaults to NULL
+
 #' @importFrom magrittr %>%
 #' @export
-io_classifier <- function(data, species = Comm.Catch.Spp.List, year = NA, recall = T, tsn = NULL){
+io_classifier <- function(data, species = Comm.Catch.Spp.List, year = NA, recall = T, tsn = NULL, tsn2 = NULL){
 
   commercial_data = data %>%
-    mutate(State = as.character(State), abbvst = as.character(abbvst), abbvreg = as.character(abbvreg))
+    dplyr::mutate(State = as.character(State), abbvst = as.character(abbvst), abbvreg = as.character(abbvreg))
   species_list = species
 
   if(recall == T){
     temp <- unique(commercial_data$TSN) %>% FishEconProdOutput::itis_reclassify(tsn = .,
-                                                                                categories = species_list,
-                                                                                uncategorized_name = "Uncategorized")
+                                                                                categories = species_list)
     tsn_id = as.data.frame(temp[1][[1]])
+
+    temp2 <- unique(commercial_data$TSN) %>% FishEconProdOutput::itis_reclassify(tsn = .,
+                                                                                 categories = list("Finfish" = c(914179, #  Infraphylum  Gnathostomata
+                                                                                                                -914181))) # Tetrapoda; - = do NOT include
+    tsn_id2 = as.data.frame(temp2[1][[1]]) %>% dplyr::rename(category2 = category) %>% dplyr::select(-valid, -rank, -sciname)
+
   } else {
     tsn_id = tsn
+    tsnid2 = tsn2
   }
 
   if (sum(tsn_id$category %in% c("Other", "Uncategorized"))>0) {
@@ -29,7 +37,14 @@ io_classifier <- function(data, species = Comm.Catch.Spp.List, year = NA, recall
                    c("TSN", "category")]
   }
 
+  if (sum(tsn_id2$category2 %in% c("Other", "Uncategorized"))>0) {
+    tsn_id2<-tsn_id2[!(tsn_id2$category2 %in% c("Other", "Uncategorized")),
+                   c("TSN", "category2")]
+  }
+
   tsn_id$TSN<-as.numeric(as.character(tsn_id$TSN))
+
+  tsn_id2$TSN<-as.numeric(as.character(tsn_id2$TSN))
 
 
   if(length(commercial_data$abbvst[commercial_data$abbvst=="WFL"])>0){
@@ -43,8 +58,18 @@ io_classifier <- function(data, species = Comm.Catch.Spp.List, year = NA, recall
   commercial.data.merged<-dplyr::left_join(x = commercial_data,
                                            y = tsn_id,
                                            by = "TSN")
+  commercial.data.merged<-dplyr::left_join(x = commercial.data.merged,
+                                           y = tsn_id2,
+                                           by = "TSN")
 
   commercial.data.out = commercial.data.merged %>%
+    dplyr::mutate(category = case_when(
+      is.na(category) ~ category2,
+      category == "Other" & category2 == "Finfish" ~ category2,
+      category == "Uncategorized" & category2 == "Finfish" ~ category2,
+      TRUE ~ category
+    )) %>%
+    dplyr::select(-category2) %>%
     dplyr::filter(DOLLARS>0 & !is.na(DOLLARS) & !is.na(category)) %>%
     dplyr::select(State, year, DOLLARS, fips, Region, category) %>%
     dplyr::group_by(Region, State, fips, year, category) %>%
@@ -60,6 +85,8 @@ io_classifier <- function(data, species = Comm.Catch.Spp.List, year = NA, recall
       dplyr::rename(`Species Category` = category, base_catch = dollars, Year = year)
   }
 
+  commercial.data.out$`Species Category`[commercial.data.out$`Species Category`=="Finfish"]<-"All Other Finfish"
+
   return(commercial.data.out)
 
 }
@@ -70,13 +97,14 @@ io_classifier <- function(data, species = Comm.Catch.Spp.List, year = NA, recall
 #' This function takes in commercial fisheries catch numbers, IMPLAN multipliers, a GDP deflator, and imports numbers and outputs economic impacts.
 #'
 #' @param catch A data frame that details catch numbers at the state-species category level for a single year, including variables fips (FIPs number, 0 for US), spec_no (a numeric variable for species category), and base_catch (raw catch numbers in dollars).
-#' @param import A data frame that includes imports numbers in dollars at the state level for a single year, including fips (FIPs number, 0 for US) and imports. Defaults to False for no imports.
-#' @param mult A data frame that includes 17 multipliers at the state-species category-economic category for a single year. Defaults to David Records numbers.
+#' @param import_numbers A data frame that includes imports numbers in dollars at the state level for a single year, including fips (FIPs number, 0 for US) and imports. Defaults to False for no imports.
+#' @param implan_multipliers A data frame that includes 17 multipliers at the state-species category-economic category for a single year. Defaults to David Records numbers.
 #' @param deflator A numeric value that adjusts jobs numbers from the current year to the year the multipliers were made; defaults to 0.8734298, which represents 2017 to 2014.
-#' @param imports_s A data frame that includes multipliers governing the percentages of imports going to each economic category for a single year. Defaults to 2017 numbers. Set to False for no imports.
+#' @param imports_state_multipliers A data frame that includes multipliers governing the percentages of imports going to each economic category for a single year. Defaults to 2017 numbers. Set to False for no imports.
+#' @param manual A binary value indicating whether values were manually input. Defaults to FALSE
 #' @importFrom magrittr %>%
 #' @export
-io_calculator <- function(catch, import_numbers = F, implan_multipliers = multipliers, deflator = 0.8734298, import_state_multipliers = imports_states) {
+io_calculator <- function(catch, import_numbers = F, implan_multipliers = multipliers, deflator = 0.8734298, import_state_multipliers = imports_states, manual = FALSE) {
 
   base_catch = catch %>% dplyr::mutate(spec_no = dplyr::case_when(
     `Species Category` == "Shrimp" ~ 1,
@@ -86,17 +114,23 @@ io_calculator <- function(catch, import_numbers = F, implan_multipliers = multip
     `Species Category` == "HMS" ~ 5,
     `Species Category` == "Reef Fish" ~ 6,
     `Species Category` == "West Coast Groundfish " ~ 7,
+    `Species Category` == "West Coast Groundfish" ~ 7,
     `Species Category` == "West Coast Whiting " ~ 8,
+    `Species Category` == "West Coast Whiting" ~ 8,
     `Species Category` == "Halibut" ~ 9,
     `Species Category` == "Menhaden and Industrial" ~ 10,
     `Species Category` == "Salmon" ~ 11,
     `Species Category` == "Sea Scallop" ~ 12,
     `Species Category` == "Pelagic Herring and Mackerel" ~ 13,
     `Species Category` == "Surf Clam and Ocean Quahog " ~ 14,
+    `Species Category` == "Surf Clam and Ocean Quahog" ~ 14,
+    `Species Category` == "Surf Clam/Ocean Quahog" ~ 14,
     `Species Category` == "Other Trawl" ~ 15,
     `Species Category` == "All Other Finfish" ~ 16,
     `Species Category` == "All Other Shellfish  " ~ 17,
+    `Species Category` == "All Other Shellfish" ~ 17,
     `Species Category` == "Freshwater " ~ 18,
+    `Species Category` == "Freshwater" ~ 18,
     `Species Category` == "Inshore and Miscellaneous" ~ 19,
     `Species Category` == "Bait" ~ 20)) %>%
     dplyr::select(-`Species Category`)
@@ -118,6 +152,11 @@ io_calculator <- function(catch, import_numbers = F, implan_multipliers = multip
       dplyr::mutate(imports = imports * value) %>%
       dplyr::select(fips, `Economic Category` = name, base_catch = imports) %>%
       dplyr::mutate(`Species Category` = "Imports")
+  }
+
+  if(manual == TRUE){
+    multipliers = multipliers %>%
+      filter(fips %in% unique(base_catch$fips))
   }
 
 
@@ -730,7 +769,7 @@ io_cleaner <- function(impact, format = "summary", xlsx = F, fp = fips, maxyr = 
     }
   }
 
-  if(format == "FEUS"){
+  if(format == "FEUS" | format == "Manual"){
     impacts.imports.states = impacts %>%
       dplyr::filter(spec_no == 0) %>%
       dplyr::group_by(fips, `Economic Category`, Impact_Type, Imports) %>%
