@@ -2,3 +2,8 @@
 multipliers.csv
 imports_states.csv
 CommCatchList.rds
+Fisheries_IO/app.R
+*.csv
+*.xlsx
+www
+*.RData
