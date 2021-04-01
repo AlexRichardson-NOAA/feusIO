@@ -5,7 +5,7 @@ Version: 0.0.0.9000
 Authors@R:
 	c(person(given = "Alexander",
           family = "Richardson",
-          role = c("aut","cre")
+          role = c("aut","cre"),
           email = "Alex.Richardson@noaa.gov",
           comment = c(ORCID = "0000-0002-5492-7560")),
 	person(given = "Emily",
