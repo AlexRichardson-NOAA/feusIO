@@ -7,11 +7,9 @@
 #' @param year A numeric variable that can be used to filter for a specific year. Defaults to NA, which returns all years.
 #' @param recal A binary variable that determines whether the API should be queried or a default value used. Defaults to TRUE
 #' @param tsn A dataset that can be used in place of the API call. Defaults to NULL
-#' @param tsn2 A dataset that can be used in place of the API call. Defaults to NULL
-
 #' @importFrom magrittr %>%
 #' @export
-io_classifier <- function(data, species = Comm.Catch.Spp.List, year = NA, recall = T, tsn = NULL, tsn2 = NULL){
+io_classifier <- function(data, species = Comm.Catch.Spp.List, year = NA, recall = T, tsn = NULL){
 
   commercial_data = data %>%
     dplyr::mutate(State = as.character(State), abbvst = as.character(abbvst), abbvreg = as.character(abbvreg))
@@ -27,9 +25,12 @@ io_classifier <- function(data, species = Comm.Catch.Spp.List, year = NA, recall
                                                                                                                 -914181))) # Tetrapoda; - = do NOT include
     tsn_id2 = as.data.frame(temp2[1][[1]]) %>% dplyr::rename(category2 = category) %>% dplyr::select(-valid, -rank, -sciname)
 
+    tsn_id = tsn_id %>% full_join(tsn_id2)
+
   } else {
+
     tsn_id = tsn
-    tsn_id2 = tsn2
+
   }
 
   if (sum(tsn_id$category %in% c("Other", "Uncategorized"))>0) {
@@ -37,14 +38,12 @@ io_classifier <- function(data, species = Comm.Catch.Spp.List, year = NA, recall
                    c("TSN", "category")]
   }
 
-  if (sum(tsn_id2$category2 %in% c("Other", "Uncategorized"))>0) {
-    tsn_id2<-tsn_id2[!(tsn_id2$category2 %in% c("Other", "Uncategorized")),
+  if (sum(tsn_id$category2 %in% c("Other", "Uncategorized"))>0) {
+    tsn_id<-tsn_id[!(tsn_id$category2 %in% c("Other", "Uncategorized")),
                    c("TSN", "category2")]
   }
 
   tsn_id$TSN<-as.numeric(as.character(tsn_id$TSN))
-
-  tsn_id2$TSN<-as.numeric(as.character(tsn_id2$TSN))
 
 
   if(length(commercial_data$abbvst[commercial_data$abbvst=="WFL"])>0){
@@ -58,9 +57,7 @@ io_classifier <- function(data, species = Comm.Catch.Spp.List, year = NA, recall
   commercial.data.merged<-dplyr::left_join(x = commercial_data,
                                            y = tsn_id,
                                            by = "TSN")
-  commercial.data.merged<-dplyr::left_join(x = commercial.data.merged,
-                                           y = tsn_id2,
-                                           by = "TSN")
+
 
   commercial.data.out = commercial.data.merged %>%
     dplyr::mutate(category = case_when(
