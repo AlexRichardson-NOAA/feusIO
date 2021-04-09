@@ -33,10 +33,9 @@ io_classifier <- function(data, species = Comm.Catch.Spp.List, year = NA, recall
 
   }
 
-  if (sum(tsn_id$category %in% c("Other", "Uncategorized"))>0 | sum(tsn_id$category2 %in% c("Other", "Uncategorized"))>0) {
-    tsn_id<-tsn_id[!(tsn_id$category %in% c("Other", "Uncategorized")), !(tsn_id$category2 %in% c("Other", "Uncategorized")),
-                   c("TSN", "category", "category2")]
-  }
+  tsn_id = tsn_id %>%
+    dplyr::filter(category != "Other" & category != "Uncategorized"  & category2 != "Other" & category2 != "Uncategorized") %>%
+    dplyr::select(TSN, category, category2)
 
   tsn_id$TSN<-as.numeric(as.character(tsn_id$TSN))
 
