@@ -34,7 +34,7 @@ io_classifier <- function(data, species = Comm.Catch.Spp.List, year = NA, recall
   }
 
   tsn_id = tsn_id %>%
-    dplyr::filter(category != "Other" & category != "Uncategorized"  & category2 != "Other" & category2 != "Uncategorized") %>%
+    #dplyr::filter(category != "Other" & category != "Uncategorized"  & category2 != "Other" & category2 != "Uncategorized") %>%
     dplyr::select(TSN, category, category2)
 
   tsn_id$TSN<-as.numeric(as.character(tsn_id$TSN))
