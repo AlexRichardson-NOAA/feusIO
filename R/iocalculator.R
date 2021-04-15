@@ -127,7 +127,13 @@ io_calculator <- function(catch, import_numbers = F, implan_multipliers = multip
     dplyr::select(-`Species Category`)
 
 
+US_base_catch = base_catch %>%
+  select(base_catch, spec_no, Year) %>%
+  group_by(spec_no, Year) %>%
+  summarize(base_catch = sum(base_catch)) %>%
+  mutate(Region = "National", State = "US", fips = 0)
 
+base_catch = bind_rows(US_base_catch, base_catch)
 
   imports = import_numbers
   multipliers = implan_multipliers
