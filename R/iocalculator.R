@@ -714,7 +714,7 @@ io_cleaner <- function(impact, format = "summary", xlsx = F, fp = fips, maxyr = 
 
 
 
-  if (format == "econ" | format == "all") {
+  if (format == "sector" | format == "all") {
     for (n in unique(impacts$`Economic Category`)) {
       impacts_sum = impacts %>%
         dplyr::filter(`Economic Category` == n)
