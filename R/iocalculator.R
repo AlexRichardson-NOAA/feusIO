@@ -607,10 +607,9 @@ io_cleaner <- function(impact, format = "summary", xlsx = F, fp = fips, maxyr = 
     dplyr::arrange(fips, `Economic Category`, Impact_Type, spec_no)
 
   if (format == "national" | format == "all") {
-    impacts_national = impacts
+    impacts_national = impacts %>% filter(fips == 0)
 
     impacts_national_imports = impacts_national %>%
-      dplyr::filter(fips == 0) %>%
       dplyr::filter(spec_no == 0) %>%
       dplyr::group_by(`Economic Category`, Impact_Type) %>%
       dplyr::summarize(
@@ -630,7 +629,6 @@ io_cleaner <- function(impact, format = "summary", xlsx = F, fp = fips, maxyr = 
       )
 
     impacts_national = impacts_national %>%
-      dplyr::filter(fips != 0) %>%
       dplyr::group_by(`Economic Category`, Impact_Type) %>%
       dplyr::summarize(
         Direct = sum(Direct),
@@ -641,7 +639,6 @@ io_cleaner <- function(impact, format = "summary", xlsx = F, fp = fips, maxyr = 
       dplyr::arrange(`Economic Category`, Impact_Type)
 
     impacts_national_seafood = impacts_national %>%
-      dplyr::filter(fips != 0) %>%
       dplyr::ungroup() %>%
       dplyr::group_by(Impact_Type) %>%
       dplyr::summarize(
