@@ -126,12 +126,18 @@ io_calculator <- function(catch, import_numbers = F, implan_multipliers = multip
     `Species Category` == "Bait" ~ 20)) %>%
     dplyr::select(-`Species Category`)
 
-
-US_base_catch = base_catch %>%
-  select(base_catch, spec_no, Year) %>%
-  group_by(spec_no, Year) %>%
-  summarize(base_catch = sum(base_catch)) %>%
-  mutate(Region = "National", State = "US", fips = 0)
+  if(length(base_catch$base_catch[base_catch$State == "US"])==0) {
+    US_base_catch = base_catch %>%
+      select(base_catch, spec_no, Year) %>%
+      group_by(spec_no, Year) %>%
+      summarize(base_catch = sum(base_catch)) %>%
+      mutate(Region = "National",
+             State = "US",
+             fips = 0)
+  } else {
+    US_base_catch = base_catch %>% filter(State == "US")
+    base_catch = base_catch %>% filter(State != "US")
+  }
 
 base_catch = bind_rows(US_base_catch, base_catch)
 
@@ -144,7 +150,7 @@ base_catch = bind_rows(US_base_catch, base_catch)
   ############
 
   if(!imports==F) {
-    imports = imports_states %>%
+    imports = import_states %>%
       dplyr::left_join(imports) %>%
       dplyr::mutate(imports = imports * value) %>%
       dplyr::select(fips, `Economic Category` = name, base_catch = imports) %>%
