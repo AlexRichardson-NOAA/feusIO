@@ -562,7 +562,7 @@ base_catch = bind_rows(US_base_catch, base_catch)
 #' @param maxyr The catch year - only used for FEUS.
 #' @importFrom magrittr %>%
 #' @export
-io_cleaner <- function(impact, format = "summary", xlsx = F, fp = fips, maxyr = 2018) {
+io_cleaner <- function(impact, format = "national", xlsx = F, fp = fips, maxyr = 2018) {
   output = c()
   fips = fp
 
