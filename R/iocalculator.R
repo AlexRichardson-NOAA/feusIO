@@ -919,12 +919,12 @@ io_cleaner <- function(impact, format = "national", xlsx = F, fp = fips, maxyr =
 
     impacts.allsectors.us = impacts.us %>%
       dplyr::ungroup() %>%
-      dplyr::group_by(Metric, Sector, Imports, Year) %>%
+      dplyr::group_by(Sector, Imports, Year) %>%
       dplyr::summarize(Direct = sum(Direct),
                        Indirect = sum(Indirect),
                        Induced = sum(Induced),
                        Total = sum(Total)) %>%
-      dplyr::mutate(State1 = "US")
+      dplyr::mutate(State1 = "US", Metric = "Total Impacts")
 
     output = dplyr::bind_rows(impacts.states, impacts.us, impacts.imports.states, impacts.imports.us, impacts.allsectors.states, impacts.allsectors.us) %>%
       dplyr::mutate(Index_Local = row_number())
