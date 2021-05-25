@@ -124,22 +124,23 @@ io_calculator <- function(catch, import_numbers = F, implan_multipliers = multip
     `Species Category` == "Freshwater" ~ 18,
     `Species Category` == "Inshore and Miscellaneous" ~ 19,
     `Species Category` == "Bait" ~ 20)) %>%
-    dplyr::select(-`Species Category`)
+    dplyr::select(-`Species Category`) %>%
+    dplyr::filter(!is.na(spec_no))
 
   if(length(base_catch$base_catch[base_catch$State == "US"])==0) {
     US_base_catch = base_catch %>%
-      select(base_catch, spec_no, Year) %>%
-      group_by(spec_no, Year) %>%
-      summarize(base_catch = sum(base_catch)) %>%
-      mutate(Region = "National",
-             State = "US",
-             fips = 0)
+      dplyr::select(base_catch, spec_no, Year) %>%
+      dplyr::group_by(spec_no, Year) %>%
+      dplyr::summarize(base_catch = sum(base_catch)) %>%
+      dplyr::mutate(Region = "National",
+                    State = "US",
+                    fips = 0)
   } else {
-    US_base_catch = base_catch %>% filter(State == "US")
-    base_catch = base_catch %>% filter(State != "US")
+    US_base_catch = base_catch %>% dplyr::filter(State == "US")
+    base_catch = base_catch %>% dplyr::filter(State != "US")
   }
 
-base_catch = bind_rows(US_base_catch, base_catch)
+  base_catch = dplyr::bind_rows(US_base_catch, base_catch)
 
   imports = import_numbers
   multipliers = implan_multipliers
@@ -149,7 +150,7 @@ base_catch = bind_rows(US_base_catch, base_catch)
   # Cleaning #
   ############
 
-  if(!imports==F) {
+  if(imports!=F) {
     imports = import_states %>%
       dplyr::left_join(imports) %>%
       dplyr::mutate(imports = imports * value) %>%
@@ -159,7 +160,7 @@ base_catch = bind_rows(US_base_catch, base_catch)
 
   if(manual == TRUE){
     multipliers = multipliers %>%
-      filter(fips %in% unique(base_catch$fips))
+      dplyr::filter(fips %in% unique(base_catch$fips))
   }
 
 
