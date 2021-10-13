@@ -123,7 +123,8 @@ io_calculator <- function(catch, import_numbers = F, implan_multipliers = multip
     `Species Category` == "Freshwater " ~ 18,
     `Species Category` == "Freshwater" ~ 18,
     `Species Category` == "Inshore and Miscellaneous" ~ 19,
-    `Species Category` == "Bait" ~ 20)) %>%
+    `Species Category` == "Bait" ~ 20,
+    `Species Category` == "Imports" ~ 0)) %>%
     dplyr::select(-`Species Category`) %>%
     dplyr::filter(!is.na(spec_no))
 
@@ -174,7 +175,7 @@ io_calculator <- function(catch, import_numbers = F, implan_multipliers = multip
 
   multipliers_restaurants = multipliers %>% dplyr::filter(`Economic Category` == "Restaurants")
 
-
+  multipliers_brokers = multipliers %>% dplyr::filter(state_name == "All jurisdictions")
 
   ##############
   # Harvesters #
@@ -243,7 +244,8 @@ io_calculator <- function(catch, import_numbers = F, implan_multipliers = multip
 
   if (imports != F) {
     for (n in unique(multipliers_processors$fips)) {
-      multipliers_processors$processor_inputs[multipliers_processors$`Species Category` == "Imports"] <-
+      multipliers_processors$processor_inputs[multipliers_processors$`Species Category` == "Imports" &
+                                                multipliers_processors$fips == n] <-
         imports$base_catch[imports$fips == n &
                              imports$`Economic Category` == "Processors"]
     }
@@ -314,7 +316,8 @@ io_calculator <- function(catch, import_numbers = F, implan_multipliers = multip
                                                                                 processor_markup))
   if(imports != F) {
     for (n in unique(multipliers_wholesalers$fips)) {
-      multipliers_wholesalers$wholesaler_inputs[multipliers_wholesalers$`Species Category` == "Imports"] <-
+      multipliers_wholesalers$wholesaler_inputs[multipliers_wholesalers$`Species Category` == "Imports" &
+                                                  multipliers_wholesalers$fips == n] <-
         imports$base_catch[imports$fips == n &
                              imports$`Economic Category` == "Wholesalers"]
     }
@@ -391,7 +394,8 @@ io_calculator <- function(catch, import_numbers = F, implan_multipliers = multip
 
   if (imports != F) {
     for (n in unique(multipliers_grocers$fips)) {
-      multipliers_grocers$grocer_inputs[multipliers_grocers$`Species Category` == "Imports"] <-
+      multipliers_grocers$grocer_inputs[multipliers_grocers$`Species Category` == "Imports" &
+                                          multipliers_grocers$fips == n] <-
         imports$base_catch[imports$fips == n &
                              imports$`Economic Category` == "Grocers"]
     }
@@ -468,7 +472,8 @@ io_calculator <- function(catch, import_numbers = F, implan_multipliers = multip
 
   if(imports != F) {
     for (n in unique(multipliers_restaurants$fips)) {
-      multipliers_restaurants$restaurants_inputs[multipliers_restaurants$`Species Category` == "Imports"] <-
+      multipliers_restaurants$restaurant_inputs[multipliers_restaurants$`Species Category` == "Imports" &
+                                                  multipliers_restaurants$fips == n] <-
         imports$base_catch[imports$fips == n &
                              imports$`Economic Category` == "Restaurants"]
     }
@@ -523,6 +528,63 @@ io_calculator <- function(catch, import_numbers = F, implan_multipliers = multip
     E_Total
   )
 
+  ###########
+  # Brokers #
+  ###########
+  if(import_numbers!=F) {
+    broker_output = import_numbers %>%
+      dplyr::bind_cols(multipliers_brokers) %>%
+      dplyr::mutate(broker_markup = imports * 118.6554) %>%
+      dplyr::mutate(
+        PI_Direct_Impact = `Personal Income Direct Impacts` * broker_markup,
+        PI_Indirect_Impact = `Personal Income Indirect Impacts` * `RPC RPC` *
+          broker_markup,
+        PI_Induced_Impact = `Personal Income Induced Impacts` * `RPC RPC` *
+          broker_markup,
+        PI_Total = PI_Direct_Impact + PI_Indirect_Impact + PI_Induced_Impact,
+        TV_Direct_Impact = `Total Value Direct Impacts` * broker_markup,
+        TV_Indirect_Impact = `Total Value Indirect Impacts` * `RPC RPC` *
+          broker_markup,
+        TV_Induced_Impact = `Total Value Induced Impacts` * `RPC RPC` *
+          broker_markup,
+        TV_Total = TV_Direct_Impact + TV_Indirect_Impact + TV_Induced_Impact,
+        O_Direct_Impact = `Output Direct Impacts` * broker_markup,
+        O_Indirect_Impact = `Output Indirect Impacts` * `RPC RPC` * broker_markup,
+        O_Induced_Impact = `Output Induced Impacts` * `RPC RPC` * broker_markup,
+        O_Total = O_Direct_Impact + O_Indirect_Impact + O_Induced_Impact,
+        E_Direct_Impact = `Employment Direct Impacts` * broker_markup * deflator / 1000,
+        E_Indirect_Impact = `Employment Indirect Impacts` * `RPC RPC` *
+          broker_markup * deflator / 1000,
+        E_Induced_Impact = `Employment Induced Impacts` * `RPC RPC` * broker_markup * deflator / 1000,
+        E_Total = E_Direct_Impact + E_Indirect_Impact + E_Induced_Impact
+      ) %>%
+      dplyr::rename(state_abbr = `state_abbr...1`) %>%
+      dplyr::select(-`state_abbr...23`) %>%
+      dplyr::select(
+        fips,
+        `Economic Category`,
+        `Species Category`,
+        spec_no,
+        PI_Direct_Impact,
+        PI_Indirect_Impact,
+        PI_Induced_Impact,
+        PI_Total,
+        TV_Direct_Impact,
+        TV_Indirect_Impact,
+        TV_Induced_Impact,
+        TV_Total,
+        O_Direct_Impact,
+        O_Indirect_Impact,
+        O_Induced_Impact,
+        O_Total,
+        E_Direct_Impact,
+        E_Indirect_Impact,
+        E_Induced_Impact,
+        E_Total
+      )
+  }
+
+
 
   ################
   # Final Output #
@@ -533,7 +595,8 @@ io_calculator <- function(catch, import_numbers = F, implan_multipliers = multip
     processors_output,
     wholesalers_output,
     grocers_output,
-    restaurants_output
+    restaurants_output,
+    broker_output
   )
   final_output[is.na(final_output)] <- 0
 
@@ -549,6 +612,7 @@ io_calculator <- function(catch, import_numbers = F, implan_multipliers = multip
   return(final_output)
 
 }
+
 
 
 
@@ -608,7 +672,8 @@ io_cleaner <- function(impact, format = "national", xlsx = F, fp = fips, maxyr =
         "Processors",
         "Wholesalers",
         "Grocers",
-        "Restaurants"
+        "Restaurants",
+        "Brokers/importers"
       )
     )) %>%
     dplyr::arrange(fips, `Economic Category`, Impact_Type, spec_no)
@@ -617,25 +682,12 @@ io_cleaner <- function(impact, format = "national", xlsx = F, fp = fips, maxyr =
     impacts_national = impacts %>% dplyr::filter(fips == 0)
 
     impacts_national_imports = impacts_national %>%
-      dplyr::filter(spec_no == 0) %>%
-      dplyr::group_by(`Economic Category`, Impact_Type) %>%
-      dplyr::summarize(
-        Direct = sum(Direct),
-        Indirect = sum(Indirect),
-        Induced = sum(Induced),
-        Total = sum(Total)
-      ) %>%
+      dplyr::filter(spec_no == 0 & `Economic Category` == "Brokers/importers") %>%
       dplyr::arrange(`Economic Category`, Impact_Type) %>%
-      dplyr::mutate(`Economic Category` = "Imports and Brokers") %>%
-      dplyr::group_by(`Economic Category`, Impact_Type) %>%
-      dplyr::summarize(
-        Direct = sum(Direct),
-        Indirect = sum(Indirect),
-        Induced = sum(Induced),
-        Total = sum(Total)
-      )
+      dplyr::mutate(`Economic Category` = "Imports and Brokers")
 
     impacts_national = impacts_national %>%
+      dplyr::filter(`Economic Category` != "Brokers/importers") %>%
       dplyr::group_by(`Economic Category`, Impact_Type) %>%
       dplyr::summarize(
         Direct = sum(Direct),
@@ -646,6 +698,7 @@ io_cleaner <- function(impact, format = "national", xlsx = F, fp = fips, maxyr =
       dplyr::arrange(`Economic Category`, Impact_Type)
 
     impacts_national_seafood = impacts_national %>%
+      dplyr::filter(`Economic Category` != "Brokers/importers") %>%
       dplyr::ungroup() %>%
       dplyr::group_by(Impact_Type) %>%
       dplyr::summarize(
@@ -670,25 +723,12 @@ io_cleaner <- function(impact, format = "national", xlsx = F, fp = fips, maxyr =
     impacts_state_sum = impacts %>% dplyr::filter(fips != 0)
 
     impacts_state_sum_imports = impacts_state_sum %>%
-      dplyr::filter(spec_no == 0) %>%
-      dplyr::group_by(`Economic Category`, Impact_Type) %>%
-      dplyr::summarize(
-        Direct = sum(Direct),
-        Indirect = sum(Indirect),
-        Induced = sum(Induced),
-        Total = sum(Total)
-      ) %>%
+      dplyr::filter(`Economic Category` == "Brokers/importers") %>%
       dplyr::arrange(`Economic Category`, Impact_Type) %>%
       dplyr::mutate(`Economic Category` = "Imports and Brokers") %>%
-      dplyr::group_by(`Economic Category`, Impact_Type) %>%
-      dplyr::summarize(
-        Direct = sum(Direct),
-        Indirect = sum(Indirect),
-        Induced = sum(Induced),
-        Total = sum(Total)
-      )
 
     impacts_state_sum = impacts_state_sum %>%
+      dplyr::filter(`Economic Category` != "Brokers/importers") %>%
       dplyr::group_by(`Economic Category`, Impact_Type) %>%
       dplyr::summarize(
         Direct = sum(Direct),
@@ -699,6 +739,7 @@ io_cleaner <- function(impact, format = "national", xlsx = F, fp = fips, maxyr =
       dplyr::arrange(`Economic Category`, Impact_Type)
 
     impacts_state_sum_seafood = impacts_state_sum %>%
+      dplyr::filter(`Economic Category` != "Brokers/importers") %>%
       dplyr::ungroup() %>%
       dplyr::group_by(Impact_Type) %>%
       dplyr::summarize(
@@ -754,18 +795,12 @@ io_cleaner <- function(impact, format = "national", xlsx = F, fp = fips, maxyr =
 
       if (length(impacts_sum$fips) > 0 & impacts_sum$fips[1] != 0) {
         impacts_sum_imports = impacts_sum %>%
-          dplyr::filter(spec_no == 0) %>%
-          dplyr::group_by(`Economic Category`, Impact_Type) %>%
-          dplyr::summarize(
-            Direct = sum(Direct),
-            Indirect = sum(Indirect),
-            Induced = sum(Induced),
-            Total = sum(Total)
-          ) %>%
+          dplyr::filter(`Economic Category` == "Brokers/importers") %>%
           dplyr::arrange(`Economic Category`, Impact_Type) %>%
           dplyr::mutate(`Economic Category` = "Imports and Brokers")
 
         impacts_sum = impacts_sum %>%
+          dplyr::filter(`Economic Category` != "Brokers/importers") %>%
           dplyr::group_by(`Economic Category`, Impact_Type) %>%
           dplyr::summarize(
             Direct = sum(Direct),
@@ -776,6 +811,7 @@ io_cleaner <- function(impact, format = "national", xlsx = F, fp = fips, maxyr =
           dplyr::arrange(`Economic Category`, Impact_Type)
 
         impacts_sum_seafood = impacts_sum %>%
+          dplyr::filter(`Economic Category` != "Brokers/importers") %>%
           dplyr::ungroup() %>%
           dplyr::group_by(Impact_Type) %>%
           dplyr::summarize(
@@ -828,12 +864,8 @@ io_cleaner <- function(impact, format = "national", xlsx = F, fp = fips, maxyr =
 
   if(format == "FEUS" | format == "Manual"){
     impacts.imports.states = impacts %>%
-      dplyr::filter(spec_no == 0 & fips != 0) %>%
-      dplyr::group_by(fips, `Economic Category`, Impact_Type, Imports) %>%
-      dplyr::summarize(Direct = sum(Direct),
-                       Indirect = sum(Indirect),
-                       Induced = sum(Induced),
-                       Total = sum(Total)) %>%
+      dplyr::filter(`Economic Category` == "Brokers/importers") %>%
+      dplyr::filter(fips != 0) %>%
       dplyr::left_join(fips) %>%
       dplyr::ungroup() %>%
       dplyr::select(-fips) %>%
@@ -843,20 +875,11 @@ io_cleaner <- function(impact, format = "national", xlsx = F, fp = fips, maxyr =
                     Indirect = Indirect/1000,
                     Induced = Induced/1000,
                     Total = Total/1000) %>%
-      dplyr::mutate(Metric = "Importers")  %>%
-      dplyr::group_by(Metric, Sector, Imports, State1, Year) %>%
-      dplyr::summarize(Direct = sum(Direct),
-                       Indirect = sum(Indirect),
-                       Induced = sum(Induced),
-                       Total = sum(Total))
+      dplyr::mutate(Metric = "Importers")
 
     impacts.imports.us <- impacts %>%
-      dplyr::filter(spec_no == 0 & fips == 0) %>%
-      dplyr::group_by(fips, `Economic Category`, Impact_Type, Imports) %>%
-      dplyr::summarize(Direct = sum(Direct),
-                       Indirect = sum(Indirect),
-                       Induced = sum(Induced),
-                       Total = sum(Total)) %>%
+      dplyr::filter(`Economic Category` == "Brokers/importers") %>%
+      dplyr::filter(fips == 0) %>%
       dplyr::left_join(fips) %>%
       dplyr::ungroup() %>%
       dplyr::select(-fips) %>%
@@ -866,16 +889,11 @@ io_cleaner <- function(impact, format = "national", xlsx = F, fp = fips, maxyr =
                     Indirect = Indirect/1000,
                     Induced = Induced/1000,
                     Total = Total/1000) %>%
-      dplyr::mutate(Metric = "Importers")  %>%
-      dplyr::group_by(Metric, Sector, Imports, State1, Year) %>%
-      dplyr::summarize(Direct = sum(Direct),
-                       Indirect = sum(Indirect),
-                       Induced = sum(Induced),
-                       Total = sum(Total)) %>%
-      dplyr::mutate(State1 = "US")
+      dplyr::mutate(Metric = "Importers")
 
 
     impacts.states = impacts %>%
+      dplyr::filter(`Economic Category` != "Brokers/importers") %>%
       dplyr::filter(fips != 0) %>%
       dplyr::group_by(fips, `Economic Category`, Impact_Type, Imports) %>%
       dplyr::summarize(Direct = sum(Direct),
@@ -893,6 +911,7 @@ io_cleaner <- function(impact, format = "national", xlsx = F, fp = fips, maxyr =
                     Total = Total/1000)
 
     impacts.us = impacts %>%
+      dplyr::filter(`Economic Category` != "Brokers/importers") %>%
       dplyr::filter(fips == 0) %>%
       dplyr::group_by(fips, `Economic Category`, Impact_Type, Imports) %>%
       dplyr::summarize(Direct = sum(Direct),
